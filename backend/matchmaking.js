@@ -27,6 +27,8 @@ class MatchmakingQueue {
       country: profile.country || 'any',
       language: profile.language || 'en',
       mode: profile.mode || 'video',
+      genderPreference: profile.genderPreference || 'both', // what gender they want to match with
+      selfGender: profile.selfGender || 'unspecified', // their own gender
       joinedAt: Date.now()
     };
 
@@ -79,6 +81,20 @@ class MatchmakingQueue {
     let bestMatch = null;
     let bestScore = -1;
 
+    const genderCompatible = (a, b) => {
+      // Check if a's preference allows b
+      const aWants = a.genderPreference || 'both';
+      const bIs = b.selfGender || 'unspecified';
+      const aOk = aWants === 'both' || bIs === 'unspecified' || aWants === bIs;
+
+      // Check if b's preference allows a
+      const bWants = b.genderPreference || 'both';
+      const aIs = a.selfGender || 'unspecified';
+      const bOk = bWants === 'both' || aIs === 'unspecified' || bWants === aIs;
+
+      return aOk && bOk;
+    };
+
     // First, try to find users with common interests
     if (userProfile.interests.length > 0) {
       const candidateIds = new Set();
@@ -94,6 +110,7 @@ class MatchmakingQueue {
         const profile = this.waitingQueue.get(socketId);
         if (!profile) continue;
         if (profile.mode !== userProfile.mode) continue;
+        if (!genderCompatible(userProfile, profile)) continue;
 
         const score = this.calculateMatchScore(userProfile, profile);
         if (score > bestScore) {
@@ -109,6 +126,7 @@ class MatchmakingQueue {
       
       for (const [socketId, profile] of this.waitingQueue) {
         if (profile.mode !== userProfile.mode) continue;
+        if (!genderCompatible(userProfile, profile)) continue;
         
         if (profile.joinedAt < oldestWait) {
           oldestWait = profile.joinedAt;

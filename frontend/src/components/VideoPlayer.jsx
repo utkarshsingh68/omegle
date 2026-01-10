@@ -149,7 +149,7 @@ export default function VideoPlayer({
       {/* Video Controls Overlay */}
       <div className="absolute top-3 right-3 flex items-center gap-2">
         {/* Quality Badge */}
-        {remoteStream && (
+        {remoteStream && currentQuality && (
           <div className={`px-2 py-1 rounded-full text-xs text-white flex items-center gap-1 ${
             connectionQuality === 'good' ? 'bg-emerald-600' :
             connectionQuality === 'fair' ? 'bg-yellow-600' : 'bg-red-600'

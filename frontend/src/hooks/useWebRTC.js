@@ -404,27 +404,37 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
    * Toggle video
    */
   const toggleVideo = useCallback(() => {
+    console.log('📹 Toggling video, current state:', isVideoEnabled);
     if (localStreamRef.current) {
-      const videoTrack = localStreamRef.current.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoTrack.enabled;
-        setIsVideoEnabled(videoTrack.enabled);
-      }
+      const videoTracks = localStreamRef.current.getVideoTracks();
+      console.log('📹 Video tracks found:', videoTracks.length);
+      videoTracks.forEach(track => {
+        track.enabled = !track.enabled;
+        console.log('📹 Video track enabled:', track.enabled);
+      });
+      setIsVideoEnabled(prev => !prev);
+    } else {
+      console.warn('📹 No local stream available for video toggle');
     }
-  }, []);
+  }, [isVideoEnabled]);
 
   /**
    * Toggle audio
    */
   const toggleAudio = useCallback(() => {
+    console.log('🎤 Toggling audio, current state:', isAudioEnabled);
     if (localStreamRef.current) {
-      const audioTrack = localStreamRef.current.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setIsAudioEnabled(audioTrack.enabled);
-      }
+      const audioTracks = localStreamRef.current.getAudioTracks();
+      console.log('🎤 Audio tracks found:', audioTracks.length);
+      audioTracks.forEach(track => {
+        track.enabled = !track.enabled;
+        console.log('🎤 Audio track enabled:', track.enabled);
+      });
+      setIsAudioEnabled(prev => !prev);
+    } else {
+      console.warn('🎤 No local stream available for audio toggle');
     }
-  }, []);
+  }, [isAudioEnabled]);
 
   /**
    * Close connection and cleanup

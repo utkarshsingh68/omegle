@@ -1,6 +1,6 @@
 /**
  * Advanced Omegle Clone - Backend Server
- * Features: Interest matching, screen sharing, stats broadcast, reconnection
+ * Features: Interest matching, screen sharing, stats broadcast, reconnection, auth, friends
  */
 
 const express = require('express');
@@ -10,23 +10,38 @@ const cors = require('cors');
 
 const matchmaking = require('./matchmaking');
 const moderation = require('./moderation');
+const auth = require('./auth');
 
 // Initialize Express app
 const app = express();
 const httpServer = createServer(app);
 
+// CORS origins configuration
+const getAllowedOrigins = () => {
+  const frontendUrl = process.env.FRONTEND_URL;
+  if (!frontendUrl) return "*";
+  
+  // Support multiple origins separated by comma
+  const origins = frontendUrl.split(',').map(url => url.trim());
+  return origins.length === 1 ? origins[0] : origins;
+};
+
+const corsOptions = {
+  origin: getAllowedOrigins(),
+  methods: ["GET", "POST", "OPTIONS"],
+  credentials: true
+};
+
 // Socket.IO with CORS configuration
 const io = new Server(httpServer, {
-  cors: {
-    origin: process.env.FRONTEND_URL || "*",
-    methods: ["GET", "POST"]
-  },
+  cors: corsOptions,
   pingTimeout: 60000,
-  pingInterval: 25000
+  pingInterval: 25000,
+  transports: ['websocket', 'polling']
 });
 
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // API Routes
@@ -48,6 +63,127 @@ app.get('/api/stats', (req, res) => {
     chatting: stats.activePairsCount * 2,
     popularInterests: stats.popularInterests
   });
+});
+
+// ====================
+// AUTH API ROUTES
+// ====================
+
+// Register new user
+app.post('/api/auth/register', (req, res) => {
+  const { username, email, password, displayName } = req.body;
+  const result = auth.register(username, email, password, displayName);
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(400).json(result);
+  }
+});
+
+// Login user
+app.post('/api/auth/login', (req, res) => {
+  const { usernameOrEmail, password } = req.body;
+  const result = auth.login(usernameOrEmail, password);
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(401).json(result);
+  }
+});
+
+// Guest login
+app.post('/api/auth/guest', (req, res) => {
+  const result = auth.guestLogin();
+  res.json(result);
+});
+
+// Validate session
+app.get('/api/auth/session', (req, res) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  const user = auth.validateSession(token);
+  if (user) {
+    res.json({ success: true, user });
+  } else {
+    res.status(401).json({ success: false, error: 'Invalid session' });
+  }
+});
+
+// Logout
+app.post('/api/auth/logout', (req, res) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  const result = auth.logout(token);
+  res.json(result);
+});
+
+// Update profile
+app.put('/api/auth/profile', (req, res) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  const user = auth.validateSession(token);
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Invalid session' });
+  }
+  const result = auth.updateProfile(user.id, req.body);
+  res.json(result);
+});
+
+// Convert guest to registered user
+app.post('/api/auth/convert', (req, res) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  const user = auth.validateSession(token);
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Invalid session' });
+  }
+  const { username, email, password } = req.body;
+  const result = auth.convertGuestToUser(user.id, username, email, password);
+  if (result.success) {
+    res.json(result);
+  } else {
+    res.status(400).json(result);
+  }
+});
+
+// Get available avatars
+app.get('/api/auth/avatars', (req, res) => {
+  res.json({ avatars: auth.AVATARS });
+});
+
+// ====================
+// FRIENDS API ROUTES
+// ====================
+
+// Get friends list
+app.get('/api/friends', (req, res) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  const user = auth.validateSession(token);
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Invalid session' });
+  }
+  const friends = auth.getFriends(user.id);
+  res.json({ success: true, friends });
+});
+
+// Get friend requests
+app.get('/api/friends/requests', (req, res) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  const user = auth.validateSession(token);
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Invalid session' });
+  }
+  const requests = auth.getFriendRequests(user.id);
+  const sent = auth.getSentRequests(user.id);
+  res.json({ success: true, received: requests, sent });
+});
+
+// Search users
+app.get('/api/users/search', (req, res) => {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  const user = auth.validateSession(token);
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'Invalid session' });
+  }
+  const { q } = req.query;
+  const users = auth.searchUsers(q, user.id);
+  res.json({ success: true, users });
 });
 
 // Store user sessions for reconnection
@@ -93,6 +229,154 @@ io.on('connection', (socket) => {
   });
 
   // ------------------
+  // AUTH EVENTS
+  // ------------------
+
+  /**
+   * User authenticates with session token
+   */
+  socket.on('authenticate', (data) => {
+    const { sessionToken } = data;
+    const user = auth.validateSession(sessionToken);
+    if (user) {
+      auth.setUserOnline(socket.id, user.id);
+      socket.userId = user.id;
+      socket.emit('authenticated', { user });
+      console.log(`🔐 User authenticated: ${user.displayName} (${socket.id})`);
+      
+      // Notify friends that user is online
+      const friends = auth.getFriends(user.id);
+      friends.forEach(friend => {
+        const friendSocketId = auth.getSocketIdByUserId(friend.id);
+        if (friendSocketId) {
+          io.to(friendSocketId).emit('friend-online', { friendId: user.id, displayName: user.displayName });
+        }
+      });
+    } else {
+      socket.emit('auth-error', { error: 'Invalid session' });
+    }
+  });
+
+  // ------------------
+  // FRIEND EVENTS
+  // ------------------
+
+  /**
+   * Send friend request to current chat partner
+   */
+  socket.on('send-friend-request', (data) => {
+    if (!socket.userId) {
+      socket.emit('friend-error', { error: 'Please login to add friends' });
+      return;
+    }
+
+    const partnerId = matchmaking.getPartner(socket.id);
+    if (!partnerId) {
+      socket.emit('friend-error', { error: 'No partner to add' });
+      return;
+    }
+
+    // Get partner's user ID
+    const partnerUser = auth.getUserBySocketId(partnerId);
+    if (!partnerUser) {
+      socket.emit('friend-error', { error: 'Partner is not logged in' });
+      return;
+    }
+
+    const result = auth.sendFriendRequest(socket.userId, partnerUser.id);
+    if (result.success) {
+      socket.emit('friend-request-sent', result);
+      
+      // Notify the partner
+      io.to(partnerId).emit('friend-request-received', {
+        from: socket.userId,
+        fromName: auth.getUserById(socket.userId)?.displayName,
+        fromAvatar: auth.getUserById(socket.userId)?.avatar
+      });
+    } else {
+      socket.emit('friend-error', result);
+    }
+  });
+
+  /**
+   * Accept friend request
+   */
+  socket.on('accept-friend-request', (data) => {
+    if (!socket.userId) {
+      socket.emit('friend-error', { error: 'Not authenticated' });
+      return;
+    }
+
+    const { fromUserId } = data;
+    const result = auth.acceptFriendRequest(socket.userId, fromUserId);
+    if (result.success) {
+      socket.emit('friend-request-accepted', result);
+      
+      // Notify the other user
+      const otherSocketId = auth.getSocketIdByUserId(fromUserId);
+      if (otherSocketId) {
+        io.to(otherSocketId).emit('friend-added', {
+          friend: auth.getUserById(socket.userId)
+        });
+      }
+    } else {
+      socket.emit('friend-error', result);
+    }
+  });
+
+  /**
+   * Decline friend request
+   */
+  socket.on('decline-friend-request', (data) => {
+    if (!socket.userId) {
+      socket.emit('friend-error', { error: 'Not authenticated' });
+      return;
+    }
+
+    const { fromUserId } = data;
+    const result = auth.declineFriendRequest(socket.userId, fromUserId);
+    socket.emit('friend-request-declined', result);
+  });
+
+  /**
+   * Remove friend
+   */
+  socket.on('remove-friend', (data) => {
+    if (!socket.userId) {
+      socket.emit('friend-error', { error: 'Not authenticated' });
+      return;
+    }
+
+    const { friendId } = data;
+    const result = auth.removeFriend(socket.userId, friendId);
+    if (result.success) {
+      socket.emit('friend-removed', { friendId });
+      
+      // Notify the other user
+      const otherSocketId = auth.getSocketIdByUserId(friendId);
+      if (otherSocketId) {
+        io.to(otherSocketId).emit('friend-removed', { friendId: socket.userId });
+      }
+    } else {
+      socket.emit('friend-error', result);
+    }
+  });
+
+  /**
+   * Get friends list via socket
+   */
+  socket.on('get-friends', () => {
+    if (!socket.userId) {
+      socket.emit('friends-list', { friends: [], requests: [] });
+      return;
+    }
+
+    const friends = auth.getFriends(socket.userId);
+    const requests = auth.getFriendRequests(socket.userId);
+    socket.emit('friends-list', { friends, requests });
+  });
+
+  // ------------------
   // MATCHMAKING EVENTS
   // ------------------
 
@@ -106,7 +390,9 @@ io.on('connection', (socket) => {
       interests: preferences.interests || [],
       country: preferences.country || 'any',
       language: preferences.language || 'en',
-      mode: preferences.mode || 'video'
+      mode: preferences.mode || 'video',
+      genderPreference: preferences.genderPreference || preferences.gender || 'both',
+      selfGender: preferences.selfGender || 'unspecified'
     };
     
     const match = matchmaking.addToQueue(socket.id, profile);
@@ -197,10 +483,10 @@ io.on('connection', (socket) => {
   // ------------------
 
   /**
-   * Text message from user
+   * Text message from user (with optional media)
    */
   socket.on('chat-message', (data) => {
-    const { message } = data;
+    const { message, media } = data;
     
     // Check if muted
     const muteStatus = moderation.isMuted(socket.id);
@@ -219,23 +505,32 @@ io.on('connection', (socket) => {
       return;
     }
     
-    // Validate message
-    const validation = moderation.validateMessage(socket.id, message);
-    if (!validation.valid) {
-      socket.emit('error', { message: validation.reason, type: 'validation' });
-      return;
+    // Validate message (if text exists)
+    let sanitizedMessage = message || '';
+    if (message) {
+      const validation = moderation.validateMessage(socket.id, message);
+      if (!validation.valid) {
+        socket.emit('error', { message: validation.reason, type: 'validation' });
+        return;
+      }
+      if (validation.warning) {
+        socket.emit('warning', { message: validation.warning });
+      }
+      sanitizedMessage = validation.sanitized;
     }
     
-    // Send warning if any
-    if (validation.warning) {
-      socket.emit('warning', { message: validation.warning });
+    // Validate media size (max 5MB base64)
+    if (media && media.data && media.data.length > 7 * 1024 * 1024) {
+      socket.emit('error', { message: 'Media file too large', type: 'validation' });
+      return;
     }
     
     // Get partner and send message
     const partnerId = matchmaking.getPartner(socket.id);
     if (partnerId) {
       const messageData = { 
-        message: validation.sanitized,
+        message: sanitizedMessage,
+        media: media || null,
         timestamp: Date.now(),
         id: `${socket.id}-${Date.now()}`
       };
@@ -389,6 +684,18 @@ io.on('connection', (socket) => {
       });
     }
     
+    // Notify friends that user went offline
+    if (socket.userId) {
+      const friends = auth.getFriends(socket.userId);
+      friends.forEach(friend => {
+        const friendSocketId = auth.getSocketIdByUserId(friend.id);
+        if (friendSocketId) {
+          io.to(friendSocketId).emit('friend-offline', { friendId: socket.userId });
+        }
+      });
+      auth.setUserOffline(socket.id);
+    }
+    
     // Cleanup
     matchmaking.userDisconnected(socket.id);
     moderation.cleanupUser(socket.id);
@@ -424,13 +731,13 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Start server
 const PORT = process.env.PORT || 3001;
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log(`
   ╔════════════════════════════════════════╗
   ║  🚀 Omegle Clone Server v2.0          ║
   ╠════════════════════════════════════════╣
   ║  📍 Port: ${PORT}                         ║
-  ║  🌐 URL: http://localhost:${PORT}         ║
+  ║  🌐 URL: http://0.0.0.0:${PORT}           ║
   ║  ⚡ Features:                          ║
   ║     • Interest-based matching         ║
   ║     • Screen sharing support          ║

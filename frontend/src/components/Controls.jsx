@@ -1,6 +1,6 @@
 /**
  * Advanced Controls Component
- * Features: Screen sharing, quality settings, keyboard shortcuts display
+ * Features: Screen sharing, quality settings, keyboard shortcuts display, add friend
  */
 
 import { useState, useEffect } from 'react';
@@ -20,13 +20,23 @@ export default function Controls({
   onSkip,
   onStop,
   onReport,
+  onAddFriend,
+  canAddFriend,
   latency
 }) {
   const [showReportModal, setShowReportModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [friendRequestSent, setFriendRequestSent] = useState(false);
 
   const isMatched = connectionStatus === 'matched';
   const isSearching = connectionStatus === 'searching' || connectionStatus === 'waiting';
+
+  // Reset friend request state when connection status changes
+  useEffect(() => {
+    if (connectionStatus !== 'matched') {
+      setFriendRequestSent(false);
+    }
+  }, [connectionStatus]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -228,6 +238,40 @@ export default function Controls({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
                 d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9" />
             </svg>
+          </button>
+        )}
+
+        {/* Add Friend Button */}
+        {isMatched && (
+          <button
+            onClick={() => {
+              if (!friendRequestSent) {
+                if (onAddFriend) {
+                  onAddFriend();
+                  if (canAddFriend) {
+                    setFriendRequestSent(true);
+                  }
+                }
+              }
+            }}
+            disabled={friendRequestSent}
+            className={`p-3 rounded-full transition-all duration-200 tooltip ${
+              friendRequestSent
+                ? 'bg-emerald-500 text-white cursor-default'
+                : 'bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 text-white shadow-lg hover:shadow-pink-500/25'
+            }`}
+            data-tooltip={friendRequestSent ? "Request Sent!" : "Add Friend"}
+          >
+            {friendRequestSent ? (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
+                  d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
+            )}
           </button>
         )}
 

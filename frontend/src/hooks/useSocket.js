@@ -1,6 +1,6 @@
 /**
  * Advanced Socket Hook
- * Features: Auto-reconnection, interest matching, stats sync
+ * Features: Auto-reconnection, interest matching, stats sync, authentication
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
@@ -8,7 +8,7 @@ import { io } from 'socket.io-client';
 
 const SOCKET_SERVER = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
 
-export default function useSocket() {
+export default function useSocket(sessionToken = null) {
   const socketRef = useRef(null);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
@@ -24,6 +24,8 @@ export default function useSocket() {
   const [matchInfo, setMatchInfo] = useState(null);
   const [stats, setStats] = useState({ online: 0, waiting: 0, chatting: 0 });
   const [latency, setLatency] = useState(0);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [partnerInfo, setPartnerInfo] = useState(null); // Partner's user info if logged in
 
   // Initialize socket connection
   useEffect(() => {
@@ -45,8 +47,24 @@ export default function useSocket() {
         setConnectionStatus('connected');
         reconnectAttempts.current = 0;
         
+        // Authenticate if we have a session token
+        if (sessionToken) {
+          socket.emit('authenticate', { sessionToken });
+        }
+        
         // Start latency check
         startLatencyCheck();
+      });
+      
+      // Authentication response
+      socket.on('authenticated', (data) => {
+        console.log('🔐 Authenticated:', data.user?.displayName);
+        setIsAuthenticated(true);
+      });
+      
+      socket.on('auth-error', (data) => {
+        console.error('Auth error:', data.error);
+        setIsAuthenticated(false);
       });
 
       socket.on('disconnect', (reason) => {
@@ -119,6 +137,7 @@ export default function useSocket() {
           id: data.id,
           type: 'stranger',
           text: data.message,
+          media: data.media || null,
           timestamp: data.timestamp,
           reactions: []
         }]);
@@ -184,7 +203,7 @@ export default function useSocket() {
         socketRef.current.disconnect();
       }
     };
-  }, []);
+  }, [sessionToken]);
 
   // Latency check interval
   const startLatencyCheck = () => {
@@ -237,15 +256,16 @@ export default function useSocket() {
     }
   }, []);
 
-  // Send chat message
-  const sendMessage = useCallback((message) => {
-    if (socketRef.current && partnerId && message.trim()) {
+  // Send chat message (with optional media)
+  const sendMessage = useCallback((message, media = null) => {
+    if (socketRef.current && partnerId && (message.trim() || media)) {
       const msgId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      socketRef.current.emit('chat-message', { message });
+      socketRef.current.emit('chat-message', { message, media });
       setMessages(prev => [...prev, {
         id: msgId,
         type: 'you',
         text: message,
+        media: media,
         timestamp: Date.now(),
         reactions: []
       }]);
@@ -296,6 +316,8 @@ export default function useSocket() {
     matchInfo,
     stats,
     latency,
+    isAuthenticated,
+    partnerInfo,
     findPartner,
     skipPartner,
     stopSearch,

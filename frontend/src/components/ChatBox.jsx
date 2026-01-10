@@ -1,13 +1,12 @@
 /**
- * Advanced ChatBox Component
- * Features: Emoji picker, reactions, export chat, keyboard shortcuts
+ * ChatBox Component with Photo/Video Sharing
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 
-// Common emojis for quick access
 const QUICK_EMOJIS = ['👋', '😊', '😂', '❤️', '👍', '🎉', '🔥', '💯', '🤔', '😎'];
 const REACTION_EMOJIS = ['❤️', '😂', '👍', '😮', '😢', '🔥'];
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
 export default function ChatBox({ 
   messages, 
@@ -15,144 +14,134 @@ export default function ChatBox({
   onTyping,
   onReaction,
   partnerTyping,
-  isConnected,
-  matchInfo
+  isConnected
 }) {
   const [inputValue, setInputValue] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [hoveredMessageId, setHoveredMessageId] = useState(null);
+  const [mediaPreview, setMediaPreview] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const fileInputRef = useRef(null);
   const typingTimeoutRef = useRef(null);
 
-  // Auto-scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, partnerTyping]);
 
-  // Focus input on mount
   useEffect(() => {
-    if (isConnected) {
-      inputRef.current?.focus();
-    }
+    if (isConnected) inputRef.current?.focus();
   }, [isConnected]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      // ESC to close emoji picker
-      if (e.key === 'Escape') {
-        setShowEmojiPicker(false);
-      }
-      // Ctrl+E for emoji picker
-      if (e.ctrlKey && e.key === 'e') {
-        e.preventDefault();
-        setShowEmojiPicker(prev => !prev);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  // Handle input change
   const handleInputChange = (e) => {
     setInputValue(e.target.value);
     onTyping(true);
-    
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-    
-    typingTimeoutRef.current = setTimeout(() => {
-      onTyping(false);
-    }, 1000);
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => onTyping(false), 1000);
   };
 
-  // Handle submit
   const handleSubmit = (e) => {
     e.preventDefault();
-    
-    if (inputValue.trim() && isConnected) {
-      onSendMessage(inputValue.trim());
+    if ((inputValue.trim() || mediaPreview) && isConnected) {
+      if (mediaPreview) {
+        onSendMessage(inputValue.trim(), { type: mediaPreview.type, data: mediaPreview.data, name: mediaPreview.name });
+        setMediaPreview(null);
+      } else {
+        onSendMessage(inputValue.trim());
+      }
       setInputValue('');
       onTyping(false);
       setShowEmojiPicker(false);
     }
   };
 
-  // Insert emoji
   const insertEmoji = (emoji) => {
     setInputValue(prev => prev + emoji);
     inputRef.current?.focus();
   };
 
-  // Export chat
-  const exportChat = useCallback(() => {
-    const chatContent = messages
-      .map(msg => {
-        const time = new Date(msg.timestamp).toLocaleTimeString();
-        const sender = msg.type === 'you' ? 'You' : msg.type === 'stranger' ? 'Stranger' : 'System';
-        return `[${time}] ${sender}: ${msg.text}`;
-      })
-      .join('\n');
-    
-    const blob = new Blob([chatContent], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `chat-${new Date().toISOString().split('T')[0]}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [messages]);
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  // Format time
+    if (file.size > MAX_FILE_SIZE) {
+      alert('File too large. Max 5MB.');
+      return;
+    }
+
+    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/');
+
+    if (!isImage && !isVideo) {
+      alert('Only images and videos are allowed.');
+      return;
+    }
+
+    setIsUploading(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setMediaPreview({
+        type: isImage ? 'image' : 'video',
+        data: event.target.result,
+        name: file.name
+      });
+      setIsUploading(false);
+    };
+    reader.onerror = () => {
+      alert('Failed to read file.');
+      setIsUploading(false);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const removeMediaPreview = () => {
+    setMediaPreview(null);
+  };
+
   const formatTime = (timestamp) => {
-    return new Date(timestamp).toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
+    return new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const renderMedia = (media) => {
+    if (!media) return null;
+    if (media.type === 'image') {
+      return (
+        <img 
+          src={media.data} 
+          alt={media.name || 'Shared image'} 
+          className="max-w-[200px] max-h-[150px] rounded-lg cursor-pointer hover:opacity-90 object-cover"
+          onClick={() => window.open(media.data, '_blank')}
+        />
+      );
+    }
+    if (media.type === 'video') {
+      return (
+        <video 
+          src={media.data} 
+          controls 
+          className="max-w-[200px] max-h-[150px] rounded-lg"
+        />
+      );
+    }
+    return null;
   };
 
   return (
-    <div className="flex flex-col h-full bg-white dark:bg-gray-800 rounded-2xl overflow-hidden shadow-xl border border-gray-200 dark:border-gray-700">
+    <div className="flex flex-col h-full bg-[#1a1a2e] rounded-2xl overflow-hidden border border-[#2a2a4a] min-h-0">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a4a] bg-[#16162a]">
         <div className="flex items-center gap-2">
-          <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-gray-400'}`} />
-          <span className="font-medium text-gray-900 dark:text-white">
-            {isConnected ? 'Stranger' : 'Disconnected'}
-          </span>
-          {matchInfo?.commonInterests?.length > 0 && (
-            <div className="flex items-center gap-1 ml-2">
-              {matchInfo.commonInterests.slice(0, 2).map((interest, i) => (
-                <span key={i} className="tag text-xs">
-                  {interest}
-                </span>
-              ))}
-            </div>
-          )}
+          <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-400'}`} />
+          <span className="font-medium text-white">{isConnected ? 'Stranger' : 'Disconnected'}</span>
         </div>
-        
-        {/* Export button */}
-        {messages.length > 0 && (
-          <button
-            onClick={exportChat}
-            className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 transition-colors"
-            title="Export chat"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-          </button>
-        )}
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.length === 0 ? (
-          <div className="text-center text-gray-500 dark:text-gray-400 py-12">
+          <div className="text-center text-gray-500 py-12">
             <div className="text-4xl mb-3">💬</div>
             <p className="font-medium">No messages yet</p>
             <p className="text-sm mt-1">Say something to break the ice!</p>
@@ -161,50 +150,32 @@ export default function ChatBox({
           messages.map((msg, index) => (
             <div
               key={msg.id || index}
-              className={`animate-slide-up ${
-                msg.type === 'system' ? 'text-center' :
-                msg.type === 'you' ? 'text-right' : 'text-left'
-              }`}
+              className={`${msg.type === 'system' ? 'text-center' : msg.type === 'you' ? 'text-right' : 'text-left'}`}
               onMouseEnter={() => setHoveredMessageId(msg.id)}
               onMouseLeave={() => setHoveredMessageId(null)}
             >
               {msg.type === 'system' ? (
-                <span className="message-system">
-                  {msg.text}
-                </span>
+                <span className="inline-block px-3 py-1 bg-[#2a2a4a] text-gray-400 text-sm rounded-full">{msg.text}</span>
               ) : (
-                <div className="relative inline-block max-w-[80%] group">
-                  <div className={`message-bubble ${
-                    msg.type === 'you' ? 'message-you' : 'message-stranger'
-                  }`}>
-                    <div className="break-words">{msg.text}</div>
-                    <div className={`text-[10px] mt-1 ${
-                      msg.type === 'you' ? 'text-blue-200' : 'text-gray-500 dark:text-gray-400'
-                    }`}>
+                <div className="relative inline-block max-w-[80%]">
+                  <div className={`rounded-2xl px-4 py-2 ${msg.type === 'you' ? 'bg-purple-600 text-white rounded-br-md' : 'bg-[#2a2a4a] text-white rounded-bl-md'}`}>
+                    {msg.media && <div className="mb-2">{renderMedia(msg.media)}</div>}
+                    {msg.text && <div className="whitespace-pre-wrap break-words" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{msg.text}</div>}
+                    <div className={`text-[10px] mt-1 ${msg.type === 'you' ? 'text-purple-200' : 'text-gray-500'}`}>
                       {formatTime(msg.timestamp)}
                     </div>
                   </div>
                   
-                  {/* Reactions display */}
                   {msg.reactions?.length > 0 && (
                     <div className={`flex gap-0.5 mt-1 ${msg.type === 'you' ? 'justify-end' : 'justify-start'}`}>
-                      {msg.reactions.map((reaction, i) => (
-                        <span key={i} className="text-sm animate-bounce-subtle">{reaction}</span>
-                      ))}
+                      {msg.reactions.map((reaction, i) => <span key={i} className="text-sm">{reaction}</span>)}
                     </div>
                   )}
                   
-                  {/* Reaction picker (only for stranger messages) */}
                   {msg.type === 'stranger' && hoveredMessageId === msg.id && (
-                    <div className="absolute -top-8 left-0 flex gap-1 bg-white dark:bg-gray-700 rounded-full shadow-lg px-2 py-1 animate-fade-in">
+                    <div className="absolute -top-8 left-0 flex gap-1 bg-[#16162a] rounded-full shadow-lg px-2 py-1 border border-[#2a2a4a]">
                       {REACTION_EMOJIS.map((emoji) => (
-                        <button
-                          key={emoji}
-                          onClick={() => onReaction(msg.id, emoji)}
-                          className="hover:scale-125 transition-transform"
-                        >
-                          {emoji}
-                        </button>
+                        <button key={emoji} onClick={() => onReaction(msg.id, emoji)} className="hover:scale-125 transition-transform">{emoji}</button>
                       ))}
                     </div>
                   )}
@@ -214,19 +185,14 @@ export default function ChatBox({
           ))
         )}
         
-        {/* Typing indicator */}
         {partnerTyping && (
-          <div className="text-left animate-fade-in">
-            <div className="inline-block bg-gray-200 dark:bg-gray-700 rounded-2xl rounded-bl-md px-4 py-2">
+          <div className="text-left">
+            <div className="inline-block bg-[#2a2a4a] rounded-2xl rounded-bl-md px-4 py-2">
               <div className="flex items-center gap-1">
-                <span className="text-xs text-gray-500 dark:text-gray-400">typing</span>
+                <span className="text-xs text-gray-400">typing</span>
                 <div className="flex gap-1">
                   {[0, 150, 300].map((delay) => (
-                    <div
-                      key={delay}
-                      className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"
-                      style={{ animationDelay: `${delay}ms` }}
-                    />
+                    <div key={delay} className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: `${delay}ms` }} />
                   ))}
                 </div>
               </div>
@@ -237,44 +203,85 @@ export default function ChatBox({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Quick Emoji Bar */}
+      {/* Emoji Bar */}
       {showEmojiPicker && (
-        <div className="px-4 py-2 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 animate-slide-up">
+        <div className="px-4 py-2 border-t border-[#2a2a4a] bg-[#16162a]">
           <div className="flex gap-2 overflow-x-auto pb-1">
             {QUICK_EMOJIS.map((emoji) => (
-              <button
-                key={emoji}
-                onClick={() => insertEmoji(emoji)}
-                className="text-2xl hover:scale-125 transition-transform flex-shrink-0"
-              >
-                {emoji}
-              </button>
+              <button key={emoji} onClick={() => insertEmoji(emoji)} className="text-2xl hover:scale-125 transition-transform flex-shrink-0">{emoji}</button>
             ))}
           </div>
         </div>
       )}
 
+      {/* Media Preview */}
+      {mediaPreview && (
+        <div className="px-3 py-2 border-t border-[#2a2a4a] bg-[#16162a] flex items-center gap-3">
+          <div className="relative flex-shrink-0">
+            {mediaPreview.type === 'image' ? (
+              <img src={mediaPreview.data} alt="Preview" className="h-16 w-16 object-cover rounded-lg" />
+            ) : (
+              <video src={mediaPreview.data} className="h-16 w-16 object-cover rounded-lg" />
+            )}
+            <button 
+              onClick={removeMediaPreview}
+              className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-xs hover:bg-red-600"
+            >
+              ×
+            </button>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-gray-300 truncate">{mediaPreview.name}</p>
+            <p className="text-xs text-gray-500">Ready to send</p>
+          </div>
+        </div>
+      )}
+
       {/* Input Area */}
-      <form onSubmit={handleSubmit} className="p-3 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+      <form onSubmit={handleSubmit} className="p-3 border-t border-[#2a2a4a] bg-[#16162a]">
         <div className="flex items-center gap-2">
           {/* Emoji Toggle */}
           <button
             type="button"
             onClick={() => setShowEmojiPicker(prev => !prev)}
-            className={`p-2.5 rounded-xl transition-colors ${
-              showEmojiPicker 
-                ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600' 
-                : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500'
-            }`}
-            title="Emoji (Ctrl+E)"
+            className={`p-2.5 rounded-xl transition-colors ${showEmojiPicker ? 'bg-purple-600 text-white' : 'hover:bg-[#2a2a4a] text-gray-400'}`}
+            title="Emoji"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+            😊
           </button>
 
-          {/* Input */}
+          {/* Photo Button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="p-2.5 rounded-xl hover:bg-[#2a2a4a] text-gray-400 transition-colors"
+            title="Send Photo"
+            disabled={!isConnected || isUploading}
+          >
+            📷
+          </button>
+
+          {/* Video Button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="p-2.5 rounded-xl hover:bg-[#2a2a4a] text-gray-400 transition-colors"
+            title="Send Video"
+            disabled={!isConnected || isUploading}
+          >
+            🎥
+          </button>
+
+          {/* Hidden File Input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,video/*"
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+
+          {/* Text Input */}
           <input
             ref={inputRef}
             type="text"
@@ -289,28 +296,23 @@ export default function ChatBox({
             placeholder={isConnected ? "Type a message..." : "Not connected"}
             disabled={!isConnected}
             maxLength={1000}
-            className="input flex-1"
+            className="flex-1 px-4 py-2.5 bg-[#2a2a4a] rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500"
           />
 
           {/* Send Button */}
           <button
             type="submit"
-            disabled={!isConnected || !inputValue.trim()}
-            className="btn btn-primary p-2.5"
+            disabled={!isConnected || (!inputValue.trim() && !mediaPreview)}
+            className="p-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-            </svg>
+            ➤
           </button>
         </div>
         
-        {/* Character count */}
-        {inputValue.length > 800 && (
-          <div className={`text-xs mt-1 text-right ${
-            inputValue.length > 950 ? 'text-red-500' : 'text-gray-500'
-          }`}>
-            {inputValue.length}/1000
+        {isUploading && (
+          <div className="text-xs text-purple-400 mt-2 flex items-center gap-2">
+            <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
+            Processing file...
           </div>
         )}
       </form>
