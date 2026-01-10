@@ -130,21 +130,21 @@ export default function ChatBox({
 
   return (
     <div className="flex flex-col h-full bg-[#1a1a2e] rounded-2xl overflow-hidden border border-[#2a2a4a] min-h-0">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#2a2a4a] bg-[#16162a]">
+      {/* Header - Mobile Responsive */}
+      <div className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-3 border-b border-[#2a2a4a] bg-[#16162a]">
         <div className="flex items-center gap-2">
-          <div className={`w-2.5 h-2.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-400'}`} />
-          <span className="font-medium text-white">{isConnected ? 'Stranger' : 'Disconnected'}</span>
+          <div className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full ${isConnected ? 'bg-green-500' : 'bg-gray-400'}`} />
+          <span className="font-medium text-white text-sm sm:text-base">{isConnected ? 'Stranger' : 'Disconnected'}</span>
         </div>
       </div>
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      {/* Messages - Mobile Responsive */}
+      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2 sm:space-y-3">
         {messages.length === 0 ? (
-          <div className="text-center text-gray-500 py-12">
-            <div className="text-4xl mb-3">💬</div>
-            <p className="font-medium">No messages yet</p>
-            <p className="text-sm mt-1">Say something to break the ice!</p>
+          <div className="text-center text-gray-500 py-8 sm:py-12">
+            <div className="text-3xl sm:text-4xl mb-2 sm:mb-3">💬</div>
+            <p className="font-medium text-sm sm:text-base">No messages yet</p>
+            <p className="text-xs sm:text-sm mt-1">Say something to break the ice!</p>
           </div>
         ) : (
           messages.map((msg, index) => (
@@ -157,11 +157,11 @@ export default function ChatBox({
               {msg.type === 'system' ? (
                 <span className="inline-block px-3 py-1 bg-[#2a2a4a] text-gray-400 text-sm rounded-full">{msg.text}</span>
               ) : (
-                <div className="relative inline-block max-w-[80%]">
-                  <div className={`rounded-2xl px-4 py-2 ${msg.type === 'you' ? 'bg-purple-600 text-white rounded-br-md' : 'bg-[#2a2a4a] text-white rounded-bl-md'}`}>
+                <div className="relative inline-block max-w-[85%] sm:max-w-[80%]">
+                  <div className={`rounded-2xl px-3 sm:px-4 py-2 text-sm sm:text-base ${msg.type === 'you' ? 'bg-purple-600 text-white rounded-br-md' : 'bg-[#2a2a4a] text-white rounded-bl-md'}`}>
                     {msg.media && <div className="mb-2">{renderMedia(msg.media)}</div>}
                     {msg.text && <div className="whitespace-pre-wrap break-words" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{msg.text}</div>}
-                    <div className={`text-[10px] mt-1 ${msg.type === 'you' ? 'text-purple-200' : 'text-gray-500'}`}>
+                    <div className={`text-[9px] sm:text-[10px] mt-1 ${msg.type === 'you' ? 'text-purple-200' : 'text-gray-500'}`}>
                       {formatTime(msg.timestamp)}
                     </div>
                   </div>
@@ -237,14 +237,14 @@ export default function ChatBox({
         </div>
       )}
 
-      {/* Input Area */}
-      <form onSubmit={handleSubmit} className="p-3 border-t border-[#2a2a4a] bg-[#16162a]">
-        <div className="flex items-center gap-2">
+      {/* Input Area - Mobile Responsive */}
+      <form onSubmit={handleSubmit} className="p-2 sm:p-3 border-t border-[#2a2a4a] bg-[#16162a]">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           {/* Emoji Toggle */}
           <button
             type="button"
             onClick={() => setShowEmojiPicker(prev => !prev)}
-            className={`p-2.5 rounded-xl transition-colors ${showEmojiPicker ? 'bg-purple-600 text-white' : 'hover:bg-[#2a2a4a] text-gray-400'}`}
+            className={`p-2 sm:p-2.5 rounded-xl transition-colors text-sm sm:text-base ${showEmojiPicker ? 'bg-purple-600 text-white' : 'hover:bg-[#2a2a4a] text-gray-400'}`}
             title="Emoji"
           >
             😊
@@ -254,7 +254,7 @@ export default function ChatBox({
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="p-2.5 rounded-xl hover:bg-[#2a2a4a] text-gray-400 transition-colors"
+            className="p-2 sm:p-2.5 rounded-xl hover:bg-[#2a2a4a] text-gray-400 transition-colors text-sm sm:text-base"
             title="Send Photo"
             disabled={!isConnected || isUploading}
           >

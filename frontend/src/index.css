@@ -599,3 +599,164 @@ body {
   background: rgba(99, 102, 241, 0.3);
   color: inherit;
 }
+/* ========================================
+   MOBILE RESPONSIVE STYLES
+   ======================================== */
+
+/* Prevent horizontal scroll on mobile */
+html, body {
+  overflow-x: hidden;
+  width: 100%;
+}
+
+/* Touch-friendly tap targets */
+@media (max-width: 768px) {
+  button, a, input[type="button"], input[type="submit"] {
+    min-height: 44px; /* iOS recommended touch target size */
+    min-width: 44px;
+  }
+
+  /* Larger text on mobile for readability */
+  body {
+    font-size: 16px; /* Prevents iOS zoom on focus */
+  }
+
+  /* Mobile-optimized scrollbars */
+  ::-webkit-scrollbar {
+    width: 3px;
+    height: 3px;
+  }
+
+  /* Prevent text selection on buttons (better mobile UX) */
+  button {
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Mobile-friendly card padding */
+  .card {
+    padding: 1rem;
+  }
+
+  /* Stack layout on mobile */
+  .desktop-flex {
+    flex-direction: column;
+  }
+
+  /* Full width on mobile */
+  .mobile-full-width {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+/* Tablet breakpoint */
+@media (min-width: 768px) and (max-width: 1024px) {
+  /* Optimize for tablet */
+  .container {
+    padding: 0 2rem;
+  }
+}
+
+/* Safe area insets for notched devices (iPhone X+) */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: max(0px, env(safe-area-inset-left));
+    padding-right: max(0px, env(safe-area-inset-right));
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
+}
+
+/* Landscape mobile orientation */
+@media (max-width: 896px) and (orientation: landscape) {
+  /* Reduce header height in landscape */
+  header {
+    height: 48px !important;
+  }
+
+  /* Optimize video layout for landscape */
+  .video-container {
+    height: 100vh;
+    max-height: calc(100vh - 48px);
+  }
+}
+
+/* Mobile-first utility classes */
+.touch-manipulation {
+  touch-action: manipulation;
+}
+
+.prevent-zoom {
+  touch-action: pan-x pan-y;
+}
+
+/* Mobile video player optimization */
+@media (max-width: 768px) {
+  video {
+    max-width: 100%;
+    height: auto;
+    object-fit: cover;
+  }
+
+  /* Prevent video overflow */
+  .video-wrapper {
+    position: relative;
+    width: 100%;
+    overflow: hidden;
+  }
+}
+
+/* Mobile chat optimizations */
+@media (max-width: 768px) {
+  /* Larger chat input on mobile */
+  .chat-input {
+    font-size: 16px !important; /* Prevents iOS zoom */
+    padding: 0.75rem !important;
+  }
+
+  /* Mobile-friendly message bubbles */
+  .message-bubble {
+    max-width: 85%;
+    word-wrap: break-word;
+  }
+
+  /* Sticky header on mobile */
+  .mobile-sticky-header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+}
+
+/* Print styles */
+@media print {
+  header, footer, .no-print {
+    display: none !important;
+  }
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  :root {
+    --border-color: #000;
+    --text-primary: #000;
+  }
+
+  .dark {
+    --border-color: #fff;
+    --text-primary: #fff;
+  }
+}

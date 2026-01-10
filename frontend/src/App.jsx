@@ -159,32 +159,32 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#1a1a2e] text-white flex flex-col">
-      {/* Header */}
-      <header className="h-14 bg-[#16162a] border-b border-[#2a2a4a] flex items-center justify-between px-6">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">💬</div>
-          <span className="text-lg font-bold">ChatClone</span>
+      {/* Header - Mobile Responsive */}
+      <header className="h-12 sm:h-14 bg-[#16162a] border-b border-[#2a2a4a] flex items-center justify-between px-3 sm:px-6">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-sm sm:text-base">💬</div>
+          <span className="text-base sm:text-lg font-bold">ChatClone</span>
         </div>
-        <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-400"><span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-2"></span>{stats.online} online</span>
+        <div className="flex items-center gap-2 sm:gap-4">
+          <span className="text-xs sm:text-sm text-gray-400 hidden sm:flex items-center"><span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-2"></span>{stats.online} online</span>
           
           {isAuthenticated && (
-            <button onClick={toggleFriendRequests} className="relative p-2 hover:bg-[#2a2a4a] rounded-lg">
+            <button onClick={toggleFriendRequests} className="relative p-1.5 sm:p-2 hover:bg-[#2a2a4a] rounded-lg text-sm sm:text-base">
               👥
               {friendRequests.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-xs flex items-center justify-center">{friendRequests.length}</span>
+                <span className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-red-500 rounded-full text-[10px] sm:text-xs flex items-center justify-center">{friendRequests.length}</span>
               )}
             </button>
           )}
           
           {user ? (
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">{user.avatar}</div>
-              <span className="text-sm">{user.displayName}</span>
-              <button onClick={logout} className="p-2 hover:bg-[#2a2a4a] rounded-lg text-gray-400 hover:text-red-500">🚪</button>
+            <div className="flex items-center gap-1 sm:gap-2">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-sm">{user.avatar}</div>
+              <span className="text-xs sm:text-sm hidden md:inline">{user.displayName}</span>
+              <button onClick={logout} className="p-1.5 sm:p-2 hover:bg-[#2a2a4a] rounded-lg text-gray-400 hover:text-red-500 text-sm sm:text-base">🚪</button>
             </div>
           ) : (
-            <button onClick={() => setShowAuthModal(true)} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium">Login</button>
+            <button onClick={() => setShowAuthModal(true)} className="px-3 py-1.5 sm:px-4 sm:py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-xs sm:text-sm font-medium">Login</button>
           )}
         </div>
       </header>
@@ -193,68 +193,69 @@ export default function App() {
       <main className="flex-1 flex flex-col overflow-hidden">
         {isMatched ? (
           <div className="flex-1 flex flex-col overflow-hidden">
-            {/* Video + Chat Area */}
-            <div className={chatMode === 'video' ? 'flex-1 flex gap-4 p-4 min-h-0' : 'flex-1 flex p-4 min-h-0'}>
+            {/* Video + Chat Area - Mobile Responsive */}
+            <div className={chatMode === 'video' ? 'flex-1 flex flex-col lg:flex-row gap-2 sm:gap-4 p-2 sm:p-4 min-h-0' : 'flex-1 flex p-2 sm:p-4 min-h-0'}>
               {chatMode === 'video' && (
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 h-64 sm:h-80 lg:h-auto">
                   <VideoPlayer localStream={localStream} remoteStream={remoteStream} screenStream={screenStream} isVideoEnabled={isVideoEnabled} connectionState={connectionState} connectionQuality={connectionQuality} />
                 </div>
               )}
-              <div className={chatMode === 'video' ? 'w-96 flex-shrink-0 flex flex-col min-h-0' : 'flex-1 flex flex-col min-h-0'}>
+              <div className={chatMode === 'video' ? 'w-full lg:w-96 flex-shrink-0 flex flex-col min-h-0' : 'flex-1 flex flex-col min-h-0'}>
                 <ChatBox messages={messages} onSendMessage={sendMessage} onTyping={sendTyping} onReaction={sendReaction} partnerTyping={partnerTyping} isConnected={isMatched} />
               </div>
             </div>
-            {/* Controls */}
-            <div className="p-4 bg-[#16162a] border-t border-[#2a2a4a] flex items-center justify-center gap-3 flex-shrink-0">
+            {/* Controls - Mobile Responsive */}
+            <div className="p-2 sm:p-4 bg-[#16162a] border-t border-[#2a2a4a] flex items-center justify-center gap-2 sm:gap-3 flex-shrink-0">
               {chatMode === 'video' && (
                 <>
-                  <button onClick={toggleVideo} className={`p-3 rounded-full ${isVideoEnabled ? 'bg-[#2a2a4a]' : 'bg-red-500'}`}>{isVideoEnabled ? '📹' : '📷'}</button>
-                  <button onClick={toggleAudio} className={`p-3 rounded-full ${isAudioEnabled ? 'bg-[#2a2a4a]' : 'bg-red-500'}`}>{isAudioEnabled ? '🎤' : '🔇'}</button>
+                  <button onClick={toggleVideo} className={`p-2 sm:p-3 rounded-full text-sm sm:text-base ${isVideoEnabled ? 'bg-[#2a2a4a]' : 'bg-red-500'}`}>{isVideoEnabled ? '📹' : '📷'}</button>
+                  <button onClick={toggleAudio} className={`p-2 sm:p-3 rounded-full text-sm sm:text-base ${isAudioEnabled ? 'bg-[#2a2a4a]' : 'bg-red-500'}`}>{isAudioEnabled ? '🎤' : '🔇'}</button>
                 </>
               )}
-              <button onClick={stopSearch} className="p-3 rounded-full bg-red-500 hover:bg-red-600">⏹️</button>
-              <button onClick={handleSkip} className="px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-700 font-medium">⏭️ Next</button>
-              {isAuthenticated && <button onClick={sendFriendRequest} className="px-4 py-3 rounded-full bg-pink-500 hover:bg-pink-600 font-medium">➕ Add Friend</button>}
+              <button onClick={stopSearch} className="p-2 sm:p-3 rounded-full bg-red-500 hover:bg-red-600 text-sm sm:text-base">⏹️</button>
+              <button onClick={handleSkip} className="px-4 py-2 sm:px-6 sm:py-3 rounded-full bg-purple-600 hover:bg-purple-700 font-medium text-xs sm:text-base">⏭️ Next</button>
+              {isAuthenticated && <button onClick={sendFriendRequest} className="px-3 py-2 sm:px-4 sm:py-3 rounded-full bg-pink-500 hover:bg-pink-600 font-medium text-xs sm:text-base hidden sm:inline-block">➕ Add Friend</button>}
+              {isAuthenticated && <button onClick={sendFriendRequest} className="p-2 rounded-full bg-pink-500 hover:bg-pink-600 sm:hidden">➕</button>}
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center p-8">
-            {/* Interests */}
-            <div className="w-full max-w-md bg-[#16162a] rounded-2xl p-6 mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold">Interests</h3>
+          <div className="flex-1 flex flex-col items-center justify-center p-3 sm:p-8 overflow-y-auto">
+            {/* Interests - Mobile Responsive */}
+            <div className="w-full max-w-md bg-[#16162a] rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h3 className="font-semibold text-sm sm:text-base">Interests</h3>
                 <button onClick={() => setInterestsEnabled(!interestsEnabled)} className={`px-3 py-1 rounded-full text-xs font-medium ${interestsEnabled ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
                   {interestsEnabled ? 'ON' : 'OFF'}
                 </button>
               </div>
-              <div className="flex flex-wrap gap-2 mb-4">
+              <div className="flex flex-wrap gap-2 mb-3 sm:mb-4">
                 {interests.map(interest => (
-                  <span key={interest} className="px-3 py-1.5 bg-[#2a2a4a] rounded-full text-sm flex items-center gap-2">
+                  <span key={interest} className="px-2 sm:px-3 py-1 sm:py-1.5 bg-[#2a2a4a] rounded-full text-xs sm:text-sm flex items-center gap-1 sm:gap-2">
                     {interest}
                     <button onClick={() => removeInterest(interest)} className="text-gray-400 hover:text-white">×</button>
                   </span>
                 ))}
               </div>
               <form onSubmit={addInterest} className="flex gap-2">
-                <input type="text" value={newInterest} onChange={(e) => setNewInterest(e.target.value)} placeholder="Add interest..." className="flex-1 px-4 py-2 bg-[#2a2a4a] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" maxLength={20} />
-                <button type="submit" className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm font-medium">Add</button>
+                <input type="text" value={newInterest} onChange={(e) => setNewInterest(e.target.value)} placeholder="Add interest..." className="flex-1 px-3 sm:px-4 py-2 bg-[#2a2a4a] rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" maxLength={20} />
+                <button type="submit" className="px-3 sm:px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-xs sm:text-sm font-medium">Add</button>
               </form>
             </div>
 
-            {/* Gender Filter */}
-            <div className="w-full max-w-md bg-[#16162a] rounded-2xl p-6 mb-6">
-              <h3 className="font-semibold mb-3">Looking for:</h3>
-              <div className="flex justify-center gap-3 mb-4">
+            {/* Gender Filter - Mobile Responsive */}
+            <div className="w-full max-w-md bg-[#16162a] rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6">
+              <h3 className="font-semibold mb-3 text-sm sm:text-base">Looking for:</h3>
+              <div className="flex justify-center gap-2 sm:gap-3 mb-4">
                 {[{ id: 'male', label: '👨 Male' }, { id: 'both', label: '👥 Both' }, { id: 'female', label: '👩 Female' }].map(option => (
-                  <button key={option.id} onClick={() => setGenderFilter(option.id)} className={`px-4 py-2 rounded-lg text-sm font-medium ${genderFilter === option.id ? 'bg-purple-600' : 'bg-[#2a2a4a] hover:bg-[#3a3a5a]'}`}>
+                  <button key={option.id} onClick={() => setGenderFilter(option.id)} className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium ${genderFilter === option.id ? 'bg-purple-600' : 'bg-[#2a2a4a] hover:bg-[#3a3a5a]'}`}>
                     {option.label}
                   </button>
                 ))}
               </div>
-              <h3 className="font-semibold mb-3">I am:</h3>
-              <div className="flex justify-center gap-3">
+              <h3 className="font-semibold mb-3 text-sm sm:text-base">I am:</h3>
+              <div className="flex justify-center gap-2 sm:gap-3">
                 {[{ id: 'male', label: 'Male' }, { id: 'female', label: 'Female' }, { id: 'unspecified', label: 'Skip' }].map(option => (
-                  <button key={option.id} onClick={() => setMyGender(option.id)} className={`px-4 py-2 rounded-lg text-sm font-medium ${myGender === option.id ? 'bg-purple-600' : 'bg-[#2a2a4a] hover:bg-[#3a3a5a]'}`}>
+                  <button key={option.id} onClick={() => setMyGender(option.id)} className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium ${myGender === option.id ? 'bg-purple-600' : 'bg-[#2a2a4a] hover:bg-[#3a3a5a]'}`}>
                     {option.label}
                   </button>
                 ))}
