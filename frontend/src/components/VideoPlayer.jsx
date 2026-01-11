@@ -6,6 +6,7 @@
 import { useRef, useEffect, useState } from 'react';
 
 export default function VideoPlayer({ 
+  theme,
   localStream, 
   remoteStream, 
   screenStream,
@@ -15,6 +16,7 @@ export default function VideoPlayer({
   partnerScreenSharing,
   currentQuality
 }) {
+  const isDark = theme === 'dark';
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -74,11 +76,11 @@ export default function VideoPlayer({
   };
 
   return (
-    <div id="video-container" className="relative rounded-2xl overflow-hidden bg-gray-900">
+    <div id="video-container" className={`relative rounded-2xl overflow-hidden h-full ${isDark ? 'bg-white/5 backdrop-blur-lg border border-white/10' : 'bg-white shadow-xl shadow-slate-200/50 border border-slate-100'}`}>
       {/* Main Grid */}
       <div className={`grid gap-2 p-2 ${isFullscreen ? 'h-screen' : 'aspect-video'}`}>
         {/* Remote Video (Stranger) - Main */}
-        <div className="relative bg-gray-800 rounded-xl overflow-hidden">
+        <div className={`relative rounded-xl overflow-hidden ${isDark ? 'bg-black/40' : 'bg-slate-100'}`}>
           {remoteStream ? (
             <>
               <video
@@ -89,7 +91,7 @@ export default function VideoPlayer({
               />
               {/* Partner screen share indicator */}
               {partnerScreenSharing && (
-                <div className="absolute top-3 left-3 flex items-center gap-2 bg-blue-600 px-3 py-1 rounded-full text-white text-sm">
+                <div className="absolute top-3 left-3 flex items-center gap-2 bg-sky-500 px-3 py-1 rounded-full text-white text-sm">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
                       d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -99,8 +101,8 @@ export default function VideoPlayer({
               )}
             </>
           ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
-              <div className="w-20 h-20 rounded-full bg-gray-700 flex items-center justify-center mb-3">
+            <div className={`absolute inset-0 flex flex-col items-center justify-center ${isDark ? 'text-white/50' : 'text-slate-500'}`}>
+              <div className={`w-20 h-20 rounded-full flex items-center justify-center mb-3 ${isDark ? 'bg-white/10' : 'bg-slate-200'}`}>
                 <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} 
                     d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -113,7 +115,7 @@ export default function VideoPlayer({
           )}
           
           {/* Stranger label */}
-          <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-full text-xs text-white flex items-center gap-2">
+          <div className="absolute bottom-3 left-3 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full text-xs text-white flex items-center gap-2">
             <span>Stranger</span>
             {remoteStream && (
               <span className={`w-2 h-2 rounded-full ${qualityColors[connectionQuality]} animate-pulse`} />
@@ -122,7 +124,7 @@ export default function VideoPlayer({
         </div>
 
         {/* Local Video (You) - PiP style overlay */}
-        <div className="absolute bottom-16 right-4 w-32 md:w-48 aspect-video rounded-xl overflow-hidden shadow-2xl border-2 border-gray-700 bg-gray-800 hover:w-40 md:hover:w-56 transition-all duration-300">
+        <div className={`absolute bottom-16 right-4 w-32 md:w-48 aspect-video rounded-xl overflow-hidden shadow-2xl border-2 hover:w-40 md:hover:w-56 transition-all duration-300 ${isDark ? 'border-white/20 bg-black/40' : 'border-white bg-white shadow-xl'}`}>
           {localStream && isVideoEnabled ? (
             <video
               ref={localVideoRef}
@@ -132,7 +134,7 @@ export default function VideoPlayer({
               className="w-full h-full object-cover transform scale-x-[-1]"
             />
           ) : (
-            <div className="w-full h-full flex items-center justify-center text-gray-500">
+            <div className={`w-full h-full flex items-center justify-center ${isDark ? 'text-white/40' : 'text-slate-400'}`}>
               <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
                   d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -140,7 +142,7 @@ export default function VideoPlayer({
               </svg>
             </div>
           )}
-          <div className="absolute bottom-1 left-1 bg-blue-600/80 px-2 py-0.5 rounded text-[10px] text-white">
+          <div className="absolute bottom-1 left-1 bg-gradient-to-r from-blue-500 to-indigo-600 px-2 py-0.5 rounded text-[10px] text-white font-medium">
             You
           </div>
         </div>
@@ -150,11 +152,11 @@ export default function VideoPlayer({
       <div className="absolute top-3 right-3 flex items-center gap-2">
         {/* Quality Badge */}
         {remoteStream && currentQuality && (
-          <div className={`px-2 py-1 rounded-full text-xs text-white flex items-center gap-1 ${
-            connectionQuality === 'good' ? 'bg-emerald-600' :
-            connectionQuality === 'fair' ? 'bg-yellow-600' : 'bg-red-600'
+          <div className={`px-2.5 py-1 rounded-lg text-xs text-white flex items-center gap-1.5 backdrop-blur-md ${
+            connectionQuality === 'good' ? 'bg-emerald-500/80' :
+            connectionQuality === 'fair' ? 'bg-yellow-500/80' : 'bg-red-500/80'
           }`}>
-            <span>{currentQuality.toUpperCase()}</span>
+            <span className="font-medium">{currentQuality.toUpperCase()}</span>
             <div className="quality-indicator">
               <div className={`quality-bar h-2 ${connectionQuality === 'poor' ? 'bg-white' : 'bg-white/50'}`} />
               <div className={`quality-bar h-3 ${connectionQuality !== 'poor' ? 'bg-white' : 'bg-white/50'}`} />

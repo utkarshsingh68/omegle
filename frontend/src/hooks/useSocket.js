@@ -256,11 +256,62 @@ export default function useSocket(sessionToken = null) {
     }
   }, []);
 
-  // Send chat message (with optional media)
+  // Send chat message (with optional media - uses chunked upload for large files)
   const sendMessage = useCallback((message, media = null) => {
     if (socketRef.current && partnerId && (message.trim() || media)) {
       const msgId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      socketRef.current.emit('chat-message', { message, media });
+      
+      // For large media files, use chunked transfer
+      const CHUNK_SIZE = 64 * 1024; // 64KB chunks
+      const MAX_DIRECT_SIZE = 100 * 1024; // 100KB - send directly if smaller
+      
+      if (media && media.data && media.data.length > MAX_DIRECT_SIZE) {
+        // Chunked upload for large files
+        const totalChunks = Math.ceil(media.data.length / CHUNK_SIZE);
+        const transferId = `${msgId}-transfer`;
+        
+        console.log(`📤 Sending large media in ${totalChunks} chunks...`);
+        
+        // Send chunks with small delays to avoid overwhelming the socket
+        let chunkIndex = 0;
+        const sendNextChunk = () => {
+          if (chunkIndex < totalChunks) {
+            const start = chunkIndex * CHUNK_SIZE;
+            const end = Math.min(start + CHUNK_SIZE, media.data.length);
+            const chunkData = media.data.slice(start, end);
+            
+            socketRef.current.emit('media-chunk', {
+              transferId,
+              chunkIndex,
+              totalChunks,
+              data: chunkData,
+              type: media.type,
+              name: media.name
+            });
+            
+            chunkIndex++;
+            // Small delay between chunks to prevent transport overload
+            setTimeout(sendNextChunk, 10);
+          } else {
+            // All chunks sent, send completion signal with message
+            socketRef.current.emit('media-complete', {
+              transferId,
+              message: message,
+              type: media.type,
+              name: media.name,
+              totalChunks
+            });
+            console.log('✅ Media transfer complete');
+          }
+        };
+        
+        sendNextChunk();
+      } else {
+        // Small media or text only - send directly
+        socketRef.current.emit('chat-message', { message, media });
+      }
+      
+      // Add to local messages immediately
       setMessages(prev => [...prev, {
         id: msgId,
         type: 'you',

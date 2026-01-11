@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 
-export default function AuthModal({ 
+function AuthModal({ 
   isOpen, 
   onClose, 
   onLogin, 
@@ -49,7 +49,7 @@ export default function AuthModal({
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in">
         {/* Header */}
-        <div className="bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-8 text-center">
+        <div className="bg-gradient-to-r from-sky-500 to-cyan-500 px-6 py-8 text-center">
           <div className="text-5xl mb-3">🎭</div>
           <h2 className="text-2xl font-bold text-white">Welcome to Omegle Clone</h2>
           <p className="text-blue-100 mt-1">Connect with people around the world</p>
@@ -241,3 +241,5 @@ export default function AuthModal({
     </div>
   );
 }
+
+export default AuthModal;

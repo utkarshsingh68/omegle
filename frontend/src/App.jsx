@@ -1,5 +1,6 @@
 /**
- * Omegle Clone - Clean UI
+ * Strango - Meet Strangers
+ * Dark Slate + Sky Blue Theme
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -8,11 +9,18 @@ import useSocket from './hooks/useSocket';
 import useWebRTC from './hooks/useWebRTC';
 import useAuth from './hooks/useAuth';
 import useFriends from './hooks/useFriends';
+import useTheme from './hooks/useTheme';
 import VideoPlayer from './components/VideoPlayer';
 import ChatBox from './components/ChatBox';
 import AuthModal from './components/AuthModal';
+import AgeVerification from './components/AgeVerification';
 
 export default function App() {
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme === 'dark';
+  const [isAgeVerified, setIsAgeVerified] = useState(() => {
+    return localStorage.getItem('age_verified') === 'true';
+  });
   const [chatMode, setChatMode] = useState('video');
   const [interests, setInterests] = useState([]);
   const [interestsEnabled, setInterestsEnabled] = useState(true);
@@ -71,8 +79,10 @@ export default function App() {
     isAudioEnabled,
     connectionState,
     connectionQuality,
+    currentCameraFacing,
     toggleVideo,
     toggleAudio,
+    switchCamera,
   } = useWebRTC(socket, chatMode === 'video' ? partnerId : null, isInitiator);
 
   useEffect(() => {
@@ -119,33 +129,38 @@ export default function App() {
   const isMatched = connectionStatus === 'matched';
   const isSearching = connectionStatus === 'searching' || connectionStatus === 'waiting';
 
+  // Show age verification if not verified
+  if (!isAgeVerified) {
+    return <AgeVerification onVerify={() => setIsAgeVerified(true)} isDark={isDark} />;
+  }
+
   const FriendRequestsDropdown = () => {
     if (!showFriendRequests) return null;
     return createPortal(
-      <div ref={friendRequestsRef} style={{ position: 'fixed', top: dropdownPosition.top, left: dropdownPosition.left, zIndex: 99999 }} className="w-80 bg-[#16162a] border border-[#2a2a4a] rounded-xl shadow-2xl">
-        <div className="p-4 border-b border-[#2a2a4a] flex items-center justify-between">
+      <div ref={friendRequestsRef} style={{ position: 'fixed', top: dropdownPosition.top, left: dropdownPosition.left, zIndex: 99999 }} className="w-80 bg-[#0f172a] border border-[#334155] rounded-xl shadow-2xl">
+        <div className="p-4 border-b border-[#334155] flex items-center justify-between">
           <h3 className="font-semibold">👥 Friend Requests</h3>
-          <button onClick={() => setShowFriendRequests(false)} className="text-gray-400 hover:text-white">✕</button>
+          <button onClick={() => setShowFriendRequests(false)} className="text-slate-400 hover:text-white">✕</button>
         </div>
         <div className="max-h-80 overflow-y-auto p-3">
           {friendRequests.length === 0 ? (
-            <p className="text-center py-6 text-gray-500 text-sm">No pending requests</p>
+            <p className="text-center py-6 text-slate-500 text-sm">No pending requests</p>
           ) : (
             <div className="space-y-3">
               {friendRequests.map(request => (
-                <div key={request.from} className="bg-[#1a1a2e] rounded-xl p-3">
+                <div key={request.from} className="bg-[#1e293b] rounded-xl p-3">
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-sky-400 to-cyan-500 flex items-center justify-center">
                       {request.fromAvatar || request.fromName?.charAt(0).toUpperCase()}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">{request.fromName || 'Unknown'}</p>
-                      <p className="text-xs text-gray-500">wants to be friends</p>
+                      <p className="text-xs text-slate-500">wants to be friends</p>
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => acceptRequest(request.from)} className="flex-1 py-2 bg-green-600 hover:bg-green-700 rounded-lg text-sm font-medium">Accept</button>
-                    <button onClick={() => declineRequest(request.from)} className="flex-1 py-2 bg-[#2a2a4a] hover:bg-[#3a3a5a] rounded-lg text-sm font-medium">Ignore</button>
+                    <button onClick={() => acceptRequest(request.from)} className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-sm font-medium">Accept</button>
+                    <button onClick={() => declineRequest(request.from)} className="flex-1 py-2 bg-[#334155] hover:bg-[#3b4a62] rounded-lg text-sm font-medium">Ignore</button>
                   </div>
                 </div>
               ))}
@@ -158,34 +173,40 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] text-white flex flex-col">
-      {/* Header - Mobile Responsive */}
-      <header className="h-12 sm:h-14 bg-[#16162a] border-b border-[#2a2a4a] flex items-center justify-between px-3 sm:px-6">
-        <div className="flex items-center gap-2 sm:gap-3">
-          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-sm sm:text-base">💬</div>
-          <span className="text-base sm:text-lg font-bold">ChatClone</span>
+    <>
+      {/* Age Verification Modal */}
+      {!isAgeVerified && (
+        <AgeVerification 
+          onVerify={() => setIsAgeVerified(true)} 
+          isDark={isDark}
+        />
+      )}
+
+      <div
+        className={`min-h-screen flex flex-col ${isDark ? 'text-white' : 'text-slate-900'}`}
+        style={{
+          background: isDark
+            ? 'linear-gradient(135deg, #0f1419 0%, #1a1f2e 50%, #0f1419 100%)'
+            : 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)'
+        }}
+      >
+      {/* Header */}
+      <header className={`h-14 flex items-center justify-between px-4 sm:px-6 border-b backdrop-blur-md ${isDark ? 'bg-[#1a1f2e]/80 border-white/5' : 'bg-white/80 border-slate-200'} sticky top-0 z-20`}>
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-lg shadow-lg shadow-blue-500/25">🌐</div>
+          <span className={`text-lg font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>Strango</span>
         </div>
-        <div className="flex items-center gap-2 sm:gap-4">
-          <span className="text-xs sm:text-sm text-gray-400 hidden sm:flex items-center"><span className="inline-block w-2 h-2 rounded-full bg-green-500 mr-2"></span>{stats.online} online</span>
-          
-          {isAuthenticated && (
-            <button onClick={toggleFriendRequests} className="relative p-1.5 sm:p-2 hover:bg-[#2a2a4a] rounded-lg text-sm sm:text-base">
-              👥
-              {friendRequests.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-red-500 rounded-full text-[10px] sm:text-xs flex items-center justify-center">{friendRequests.length}</span>
-              )}
-            </button>
-          )}
-          
-          {user ? (
-            <div className="flex items-center gap-1 sm:gap-2">
-              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-sm">{user.avatar}</div>
-              <span className="text-xs sm:text-sm hidden md:inline">{user.displayName}</span>
-              <button onClick={logout} className="p-1.5 sm:p-2 hover:bg-[#2a2a4a] rounded-lg text-gray-400 hover:text-red-500 text-sm sm:text-base">🚪</button>
-            </div>
-          ) : (
-            <button onClick={() => setShowAuthModal(true)} className="px-3 py-1.5 sm:px-4 sm:py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-xs sm:text-sm font-medium">Login</button>
-          )}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={toggleTheme}
+            className={`px-3 py-2 rounded-xl text-sm font-medium transition-all ${isDark ? 'bg-white/5 hover:bg-white/10 text-white/80' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
+          >
+            {isDark ? '☀️' : '🌙'}
+          </button>
+          <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}>
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span className={`text-sm ${isDark ? 'text-white/70' : 'text-slate-600'}`}>{stats.online} online</span>
+          </div>
         </div>
       </header>
 
@@ -197,88 +218,77 @@ export default function App() {
             <div className={chatMode === 'video' ? 'flex-1 flex flex-col lg:flex-row gap-2 sm:gap-4 p-2 sm:p-4 min-h-0' : 'flex-1 flex p-2 sm:p-4 min-h-0'}>
               {chatMode === 'video' && (
                 <div className="flex-1 min-w-0 h-64 sm:h-80 lg:h-auto">
-                  <VideoPlayer localStream={localStream} remoteStream={remoteStream} screenStream={screenStream} isVideoEnabled={isVideoEnabled} connectionState={connectionState} connectionQuality={connectionQuality} />
+                  <VideoPlayer theme={theme} localStream={localStream} remoteStream={remoteStream} screenStream={screenStream} isVideoEnabled={isVideoEnabled} connectionState={connectionState} connectionQuality={connectionQuality} />
                 </div>
               )}
               <div className={chatMode === 'video' ? 'w-full lg:w-96 flex-shrink-0 flex flex-col min-h-0' : 'flex-1 flex flex-col min-h-0'}>
-                <ChatBox messages={messages} onSendMessage={sendMessage} onTyping={sendTyping} onReaction={sendReaction} partnerTyping={partnerTyping} isConnected={isMatched} />
+                <ChatBox theme={theme} messages={messages} onSendMessage={sendMessage} onTyping={sendTyping} onReaction={sendReaction} partnerTyping={partnerTyping} isConnected={isMatched} />
               </div>
             </div>
-            {/* Controls - Mobile Responsive */}
-            <div className="p-2 sm:p-4 bg-[#16162a] border-t border-[#2a2a4a] flex items-center justify-center gap-2 sm:gap-3 flex-shrink-0">
+            {/* Controls */}
+            <div className={`p-3 sm:p-4 border-t flex items-center justify-center gap-3 flex-shrink-0 ${isDark ? 'bg-[#1a1f2e]/80 border-white/5 backdrop-blur-md' : 'bg-white/80 border-slate-200'}`}>
               {chatMode === 'video' && (
                 <>
-                  <button onClick={toggleVideo} className={`p-2 sm:p-3 rounded-full text-sm sm:text-base ${isVideoEnabled ? 'bg-[#2a2a4a]' : 'bg-red-500'}`}>{isVideoEnabled ? '📹' : '📷'}</button>
-                  <button onClick={toggleAudio} className={`p-2 sm:p-3 rounded-full text-sm sm:text-base ${isAudioEnabled ? 'bg-[#2a2a4a]' : 'bg-red-500'}`}>{isAudioEnabled ? '🎤' : '🔇'}</button>
+                  <button onClick={toggleVideo} className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg transition-all ${isVideoEnabled ? (isDark ? 'bg-white/10 hover:bg-white/15' : 'bg-slate-100 hover:bg-slate-200') : 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/25'}`}>{isVideoEnabled ? '📹' : '📷'}</button>
+                  <button onClick={toggleAudio} className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg transition-all ${isAudioEnabled ? (isDark ? 'bg-white/10 hover:bg-white/15' : 'bg-slate-100 hover:bg-slate-200') : 'bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-500/25'}`}>{isAudioEnabled ? '🎤' : '🔇'}</button>
+                  <button onClick={switchCamera} className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg transition-all ${isDark ? 'bg-white/10 hover:bg-white/15' : 'bg-slate-100 hover:bg-slate-200'}`} title="Switch camera">🔄</button>
                 </>
               )}
-              <button onClick={stopSearch} className="p-2 sm:p-3 rounded-full bg-red-500 hover:bg-red-600 text-sm sm:text-base">⏹️</button>
-              <button onClick={handleSkip} className="px-4 py-2 sm:px-6 sm:py-3 rounded-full bg-purple-600 hover:bg-purple-700 font-medium text-xs sm:text-base">⏭️ Next</button>
-              {isAuthenticated && <button onClick={sendFriendRequest} className="px-3 py-2 sm:px-4 sm:py-3 rounded-full bg-pink-500 hover:bg-pink-600 font-medium text-xs sm:text-base hidden sm:inline-block">➕ Add Friend</button>}
-              {isAuthenticated && <button onClick={sendFriendRequest} className="p-2 rounded-full bg-pink-500 hover:bg-pink-600 sm:hidden">➕</button>}
+              <button onClick={stopSearch} className="w-12 h-12 rounded-xl bg-red-500 hover:bg-red-600 flex items-center justify-center text-lg text-white shadow-lg shadow-red-500/25 transition-all">⏹️</button>
+              <button onClick={handleSkip} className="px-6 py-3 rounded-xl font-semibold bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/25 transition-all">⏭️ Next</button>
+              {isAuthenticated && <button onClick={sendFriendRequest} className="px-4 py-3 rounded-xl font-medium bg-emerald-500 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-500/25 hidden sm:flex items-center gap-2 transition-all">➕ Add Friend</button>}
+              {isAuthenticated && <button onClick={sendFriendRequest} className="w-12 h-12 rounded-xl bg-emerald-500 hover:bg-emerald-600 flex items-center justify-center text-lg text-white shadow-lg shadow-emerald-500/25 sm:hidden transition-all">➕</button>}
             </div>
           </div>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center p-3 sm:p-8 overflow-y-auto">
-            {/* Interests - Mobile Responsive */}
-            <div className="w-full max-w-md bg-[#16162a] rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6">
-              <div className="flex items-center justify-between mb-3 sm:mb-4">
-                <h3 className="font-semibold text-sm sm:text-base">Interests</h3>
-                <button onClick={() => setInterestsEnabled(!interestsEnabled)} className={`px-3 py-1 rounded-full text-xs font-medium ${interestsEnabled ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
+            {/* Interests Card */}
+            <div className={`w-full max-w-md rounded-2xl p-6 mb-5 ${isDark ? 'bg-white/5 backdrop-blur-lg border border-white/10' : 'bg-white shadow-xl shadow-slate-200/50 border border-slate-100'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className={`font-semibold ${isDark ? 'text-white' : 'text-slate-800'}`}>✨ Interests</h3>
+                <button onClick={() => setInterestsEnabled(!interestsEnabled)} className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${interestsEnabled ? 'bg-blue-500/20 text-blue-400' : (isDark ? 'bg-white/5 text-white/50' : 'bg-slate-100 text-slate-500')}`}>
                   {interestsEnabled ? 'ON' : 'OFF'}
                 </button>
               </div>
-              <div className="flex flex-wrap gap-2 mb-3 sm:mb-4">
+              <div className="flex flex-wrap gap-2 mb-4 min-h-[40px]">
                 {interests.map(interest => (
-                  <span key={interest} className="px-2 sm:px-3 py-1 sm:py-1.5 bg-[#2a2a4a] rounded-full text-xs sm:text-sm flex items-center gap-1 sm:gap-2">
+                  <span key={interest} className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-2 ${isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-50 text-blue-700'}`}>
                     {interest}
-                    <button onClick={() => removeInterest(interest)} className="text-gray-400 hover:text-white">×</button>
+                    <button onClick={() => removeInterest(interest)} className="hover:text-red-400 transition-colors">×</button>
                   </span>
                 ))}
               </div>
               <form onSubmit={addInterest} className="flex gap-2">
-                <input type="text" value={newInterest} onChange={(e) => setNewInterest(e.target.value)} placeholder="Add interest..." className="flex-1 px-3 sm:px-4 py-2 bg-[#2a2a4a] rounded-lg text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" maxLength={20} />
-                <button type="submit" className="px-3 sm:px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg text-xs sm:text-sm font-medium">Add</button>
+                <input
+                  type="text"
+                  value={newInterest}
+                  onChange={(e) => setNewInterest(e.target.value)}
+                  placeholder="Add interest..."
+                  className={`flex-1 px-4 py-3 rounded-xl text-sm transition-all ${isDark ? 'bg-white/5 border border-white/10 text-white placeholder-white/40 focus:border-blue-500 focus:bg-white/10' : 'bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 focus:border-blue-500 focus:bg-white'} focus:outline-none focus:ring-2 focus:ring-blue-500/20`}
+                  maxLength={20}
+                />
+                <button type="submit" className="px-5 py-3 rounded-xl text-sm font-semibold bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white shadow-lg shadow-blue-500/25 transition-all">Add</button>
               </form>
             </div>
 
-            {/* Gender Filter - Mobile Responsive */}
-            <div className="w-full max-w-md bg-[#16162a] rounded-2xl p-4 sm:p-6 mb-4 sm:mb-6">
-              <h3 className="font-semibold mb-3 text-sm sm:text-base">Looking for:</h3>
-              <div className="flex justify-center gap-2 sm:gap-3 mb-4">
-                {[{ id: 'male', label: '👨 Male' }, { id: 'both', label: '👥 Both' }, { id: 'female', label: '👩 Female' }].map(option => (
-                  <button key={option.id} onClick={() => setGenderFilter(option.id)} className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium ${genderFilter === option.id ? 'bg-purple-600' : 'bg-[#2a2a4a] hover:bg-[#3a3a5a]'}`}>
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-              <h3 className="font-semibold mb-3 text-sm sm:text-base">I am:</h3>
-              <div className="flex justify-center gap-2 sm:gap-3">
-                {[{ id: 'male', label: 'Male' }, { id: 'female', label: 'Female' }, { id: 'unspecified', label: 'Skip' }].map(option => (
-                  <button key={option.id} onClick={() => setMyGender(option.id)} className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium ${myGender === option.id ? 'bg-purple-600' : 'bg-[#2a2a4a] hover:bg-[#3a3a5a]'}`}>
-                    {option.label}
-                  </button>
-                ))}
-              </div>
+            {/* Mode Toggle */}
+            <div className={`flex items-center gap-1 p-1 rounded-xl mb-6 ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}>
+              <button onClick={() => setChatMode('video')} className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${chatMode === 'video' ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg' : (isDark ? 'text-white/60 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}>📹 Video</button>
+              <button onClick={() => setChatMode('text')} className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-all ${chatMode === 'text' ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg' : (isDark ? 'text-white/60 hover:text-white' : 'text-slate-500 hover:text-slate-700')}`}>💬 Text</button>
             </div>
 
-            {/* Mode & Start */}
-            <div className="flex items-center gap-3 mb-4">
-              <button onClick={() => setChatMode('video')} className={`px-4 py-2 rounded-lg text-sm font-medium ${chatMode === 'video' ? 'bg-purple-600' : 'bg-[#2a2a4a]'}`}>📹 Video</button>
-              <button onClick={() => setChatMode('text')} className={`px-4 py-2 rounded-lg text-sm font-medium ${chatMode === 'text' ? 'bg-purple-600' : 'bg-[#2a2a4a]'}`}>💬 Text</button>
-            </div>
-
+            {/* Start Button */}
             <div className="flex items-center gap-4">
-              {isSearching && <button onClick={stopSearch} className="w-14 h-14 rounded-xl bg-red-500 hover:bg-red-600 flex items-center justify-center text-xl">⏹️</button>}
-              <button onClick={handleStartChat} disabled={!isConnected || isSearching} className="px-8 py-4 bg-purple-600 hover:bg-purple-700 rounded-xl font-semibold disabled:opacity-50">
-                {isSearching ? 'Searching...' : `Start ${chatMode === 'video' ? 'Video' : 'Text'} Chat`}
+              {isSearching && <button onClick={stopSearch} className="w-14 h-14 rounded-2xl bg-red-500 hover:bg-red-600 flex items-center justify-center text-xl text-white shadow-lg shadow-red-500/25 transition-all">⏹️</button>}
+              <button onClick={handleStartChat} disabled={!isConnected || isSearching} className="px-10 py-4 rounded-2xl font-bold text-lg bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-600 hover:from-blue-600 hover:via-indigo-600 hover:to-purple-700 text-white disabled:opacity-50 shadow-xl shadow-blue-500/30 transition-all hover:scale-[1.02] active:scale-[0.98]">
+                {isSearching ? '🔍 Searching...' : `▶️ Start ${chatMode === 'video' ? 'Video' : 'Text'} Chat`}
               </button>
             </div>
 
             {isSearching && (
-              <div className="mt-6 flex items-center gap-3 text-purple-400">
-                <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin"></div>
-                <span>Looking for someone...</span>
+              <div className="mt-6 flex items-center gap-3">
+                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                <span className={isDark ? 'text-white/70' : 'text-slate-600'}>Looking for someone...</span>
               </div>
             )}
           </div>
@@ -298,6 +308,7 @@ export default function App() {
         isLoading={authLoading}
         error={authError}
       />
-    </div>
+      </div>
+    </>
   );
 }

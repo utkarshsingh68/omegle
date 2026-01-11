@@ -28,6 +28,9 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
   const localStreamRef = useRef(null);
   const screenStreamRef = useRef(null);
   const statsIntervalRef = useRef(null);
+  const keepaliveIntervalRef = useRef(null);
+  const reconnectAttempts = useRef(0);
+  const lastIceRestartRef = useRef(0);
   
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
@@ -38,6 +41,7 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
   const [connectionState, setConnectionState] = useState('new');
   const [connectionQuality, setConnectionQuality] = useState('good'); // good, fair, poor
   const [currentQuality, setCurrentQuality] = useState('high');
+  const [currentCameraFacing, setCurrentCameraFacing] = useState('user');
   const [partnerScreenSharing, setPartnerScreenSharing] = useState(false);
 
   /**
@@ -61,6 +65,14 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
       localStreamRef.current = stream;
       setLocalStream(stream);
       setCurrentQuality(quality);
+      setCurrentCameraFacing(constraints.video?.facingMode === 'environment' ? 'environment' : 'user');
+      
+      // Sync state with actual track enabled status
+      const hasVideo = stream.getVideoTracks().length > 0;
+      const hasAudio = stream.getAudioTracks().length > 0;
+      setIsVideoEnabled(hasVideo && stream.getVideoTracks()[0]?.enabled);
+      setIsAudioEnabled(hasAudio && stream.getAudioTracks()[0]?.enabled);
+      
       return stream;
     } catch (error) {
       console.error('Error accessing media devices:', error);
@@ -71,6 +83,7 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
         localStreamRef.current = audioStream;
         setLocalStream(audioStream);
         setIsVideoEnabled(false);
+        setIsAudioEnabled(audioStream.getAudioTracks()[0]?.enabled ?? true);
         return audioStream;
       } catch (audioError) {
         console.error('Error accessing audio:', audioError);
@@ -95,6 +108,35 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
       }
     }
   }, []);
+
+  /**
+   * Stop screen sharing
+   */
+  const stopScreenShare = useCallback(async () => {
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach(track => track.stop());
+      screenStreamRef.current = null;
+      setScreenStream(null);
+      setIsScreenSharing(false);
+
+      // Restore camera video
+      const pc = peerConnectionRef.current;
+      if (pc && localStreamRef.current) {
+        const videoTrack = localStreamRef.current.getVideoTracks()[0];
+        if (videoTrack) {
+          const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+          if (sender) {
+            await sender.replaceTrack(videoTrack);
+          }
+        }
+      }
+
+      // Notify partner
+      if (socket) {
+        socket.emit('screen-share-stopped');
+      }
+    }
+  }, [socket]);
 
   /**
    * Start screen sharing
@@ -137,36 +179,109 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
       console.error('Error starting screen share:', error);
       return null;
     }
-  }, [socket]);
+  }, [socket, stopScreenShare]);
 
   /**
-   * Stop screen sharing
+   * Switch between front/rear cameras (where available)
    */
-  const stopScreenShare = useCallback(async () => {
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach(track => track.stop());
-      screenStreamRef.current = null;
-      setScreenStream(null);
-      setIsScreenSharing(false);
+  const switchCamera = useCallback(async () => {
+    try {
+      // If screen sharing is on, stop it before switching cameras
+      if (isScreenSharing) {
+        await stopScreenShare();
+      }
 
-      // Restore camera video
+      const nextFacing = currentCameraFacing === 'user' ? 'environment' : 'user';
+
+      // Only request video; reuse existing audio tracks
+      const newVideoStream = await navigator.mediaDevices.getUserMedia({
+        video: { ...QUALITY_PRESETS[currentQuality], facingMode: { ideal: nextFacing } },
+        audio: false
+      });
+
+      const newVideoTrack = newVideoStream.getVideoTracks()[0];
+      if (!newVideoTrack) return false;
+
+      const existingAudioTracks = localStreamRef.current?.getAudioTracks() || [];
+      const newCombinedStream = new MediaStream([...existingAudioTracks, newVideoTrack]);
+
+      // Replace video track in peer connection
       const pc = peerConnectionRef.current;
-      if (pc && localStreamRef.current) {
-        const videoTrack = localStreamRef.current.getVideoTracks()[0];
-        if (videoTrack) {
-          const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-          if (sender) {
-            await sender.replaceTrack(videoTrack);
-          }
+      if (pc) {
+        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) {
+          await sender.replaceTrack(newVideoTrack);
         }
       }
 
-      // Notify partner
-      if (socket) {
-        socket.emit('screen-share-stopped');
+      // Stop old video tracks
+      if (localStreamRef.current) {
+        localStreamRef.current.getVideoTracks().forEach(track => track.stop());
       }
+
+      localStreamRef.current = newCombinedStream;
+      setLocalStream(newCombinedStream);
+      setIsVideoEnabled(true);
+      setCurrentCameraFacing(nextFacing);
+      return true;
+    } catch (error) {
+      console.error('Error switching camera:', error);
+      return false;
     }
-  }, [socket]);
+  }, [currentCameraFacing, currentQuality, isScreenSharing, stopScreenShare]);
+
+  /**
+   * Start keepalive mechanism
+   */
+  const startKeepalive = () => {
+    stopKeepalive();
+    keepaliveIntervalRef.current = setInterval(() => {
+      if (socket && partnerId) {
+        socket.emit('webrtc-keepalive', { to: partnerId });
+      }
+    }, 15000); // Send keepalive every 15 seconds
+  };
+
+  /**
+   * Stop keepalive
+   */
+  const stopKeepalive = () => {
+    if (keepaliveIntervalRef.current) {
+      clearInterval(keepaliveIntervalRef.current);
+      keepaliveIntervalRef.current = null;
+    }
+  };
+
+  /**
+   * Attempt ICE restart to recover connection
+   */
+  const attemptIceRestart = async (pc) => {
+    // Prevent too frequent restarts
+    const now = Date.now();
+    if (now - lastIceRestartRef.current < 10000) {
+      console.log('⏳ ICE restart too soon, skipping...');
+      return;
+    }
+    
+    if (reconnectAttempts.current >= 3) {
+      console.log('❌ Max reconnect attempts reached');
+      return;
+    }
+    
+    lastIceRestartRef.current = now;
+    reconnectAttempts.current++;
+    
+    try {
+      if (isInitiator) {
+        console.log('🔄 Creating new offer with ICE restart...');
+        const offer = await pc.createOffer({ iceRestart: true });
+        await pc.setLocalDescription(offer);
+        socket.emit('webrtc-offer', { offer, iceRestart: true });
+      }
+    } catch (error) {
+      console.error('Error during ICE restart:', error);
+    }
+  };
 
   /**
    * Create WebRTC peer connection
@@ -214,13 +329,35 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
       
       if (pc.connectionState === 'connected') {
         startStatsMonitoring(pc);
+        startKeepalive();
+        reconnectAttempts.current = 0;
       } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
         stopStatsMonitoring();
+        stopKeepalive();
       }
     };
     
-    pc.oniceconnectionstatechange = () => {
+    pc.oniceconnectionstatechange = async () => {
       console.log('ICE connection state:', pc.iceConnectionState);
+      
+      // Handle disconnected/failed states with ICE restart
+      if (pc.iceConnectionState === 'disconnected') {
+        console.log('⚠️ ICE disconnected, will attempt restart if fails...');
+        // Wait a bit to see if it recovers
+        setTimeout(async () => {
+          if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+            console.log('🔄 Attempting ICE restart...');
+            await attemptIceRestart(pc);
+          }
+        }, 3000);
+      } else if (pc.iceConnectionState === 'failed') {
+        console.log('❌ ICE failed, restarting...');
+        await attemptIceRestart(pc);
+      } else if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        console.log('✅ ICE connection restored');
+        reconnectAttempts.current = 0;
+        startKeepalive();
+      }
     };
     
     peerConnectionRef.current = pc;
@@ -404,43 +541,54 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
    * Toggle video
    */
   const toggleVideo = useCallback(() => {
-    console.log('📹 Toggling video, current state:', isVideoEnabled);
     if (localStreamRef.current) {
       const videoTracks = localStreamRef.current.getVideoTracks();
-      console.log('📹 Video tracks found:', videoTracks.length);
-      videoTracks.forEach(track => {
-        track.enabled = !track.enabled;
-        console.log('📹 Video track enabled:', track.enabled);
-      });
-      setIsVideoEnabled(prev => !prev);
+      if (videoTracks.length > 0) {
+        // Get current state from the actual track, not from React state
+        const currentEnabled = videoTracks[0].enabled;
+        const newEnabled = !currentEnabled;
+        
+        videoTracks.forEach(track => {
+          track.enabled = newEnabled;
+        });
+        
+        console.log('📹 Video toggled:', currentEnabled, '->', newEnabled);
+        setIsVideoEnabled(newEnabled);
+      }
     } else {
       console.warn('📹 No local stream available for video toggle');
     }
-  }, [isVideoEnabled]);
+  }, []);
 
   /**
    * Toggle audio
    */
   const toggleAudio = useCallback(() => {
-    console.log('🎤 Toggling audio, current state:', isAudioEnabled);
     if (localStreamRef.current) {
       const audioTracks = localStreamRef.current.getAudioTracks();
-      console.log('🎤 Audio tracks found:', audioTracks.length);
-      audioTracks.forEach(track => {
-        track.enabled = !track.enabled;
-        console.log('🎤 Audio track enabled:', track.enabled);
-      });
-      setIsAudioEnabled(prev => !prev);
+      if (audioTracks.length > 0) {
+        // Get current state from the actual track, not from React state
+        const currentEnabled = audioTracks[0].enabled;
+        const newEnabled = !currentEnabled;
+        
+        audioTracks.forEach(track => {
+          track.enabled = newEnabled;
+        });
+        
+        console.log('🎤 Audio toggled:', currentEnabled, '->', newEnabled);
+        setIsAudioEnabled(newEnabled);
+      }
     } else {
       console.warn('🎤 No local stream available for audio toggle');
     }
-  }, [isAudioEnabled]);
+  }, []);
 
   /**
    * Close connection and cleanup
    */
   const closeConnection = useCallback(() => {
     stopStatsMonitoring();
+    stopKeepalive();
     stopScreenShare();
     
     if (peerConnectionRef.current) {
@@ -469,12 +617,17 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
     socket.on('partner-screen-share', (data) => {
       setPartnerScreenSharing(data.active);
     });
+    socket.on('webrtc-keepalive', () => {
+      // Keepalive received from partner - connection is alive
+      console.log('💓 Keepalive received from partner');
+    });
     
     return () => {
       socket.off('webrtc-offer', handleOffer);
       socket.off('webrtc-answer', handleAnswer);
       socket.off('ice-candidate', handleIceCandidate);
       socket.off('partner-screen-share');
+      socket.off('webrtc-keepalive');
     };
   }, [socket, handleOffer, handleAnswer, handleIceCandidate]);
 
@@ -510,9 +663,11 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
     connectionState,
     connectionQuality,
     currentQuality,
+    currentCameraFacing,
     partnerScreenSharing,
     toggleVideo,
     toggleAudio,
+    switchCamera,
     startScreenShare,
     stopScreenShare,
     switchQuality,
