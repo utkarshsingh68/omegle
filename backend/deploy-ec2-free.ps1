@@ -9,7 +9,7 @@ Write-Host "This will take about 5-7 minutes...`n" -ForegroundColor Cyan
 
 $INSTANCE_NAME = "omegle-backend"
 $REGION = "us-east-1"
-$DOCKER_IMAGE = "utkarsh2568/omegle-backend:v1.1"
+$DOCKER_IMAGE = "utkarsh2568/omegle-backend:latest"
 $PORT = "3001"
 $KEY_NAME = "omegle-key"
 

@@ -5,22 +5,91 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 
-// ICE servers configuration
+// ICE servers configuration with STUN + TURN for NAT traversal
 const ICE_SERVERS = {
   iceServers: [
+    // Google STUN servers
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
-  ]
+    
+    // Free TURN servers from OpenRelay (metered.ca)
+    {
+      urls: 'turn:a.relay.metered.ca:80',
+      username: 'e8dd65b92c62d5e5e3c02c65',
+      credential: 'uWdWNmkhvyqTEuTB'
+    },
+    {
+      urls: 'turn:a.relay.metered.ca:80?transport=tcp',
+      username: 'e8dd65b92c62d5e5e3c02c65',
+      credential: 'uWdWNmkhvyqTEuTB'
+    },
+    {
+      urls: 'turn:a.relay.metered.ca:443',
+      username: 'e8dd65b92c62d5e5e3c02c65',
+      credential: 'uWdWNmkhvyqTEuTB'
+    },
+    {
+      urls: 'turn:a.relay.metered.ca:443?transport=tcp',
+      username: 'e8dd65b92c62d5e5e3c02c65',
+      credential: 'uWdWNmkhvyqTEuTB'
+    },
+    
+    // Backup free TURN servers
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    }
+  ],
+  iceCandidatePoolSize: 10
 };
 
-// Video constraints for different quality levels
+// Video constraints for different quality levels - HIGH QUALITY BUT STABLE
 const QUALITY_PRESETS = {
-  high: { width: 1280, height: 720, frameRate: 30 },
-  medium: { width: 640, height: 480, frameRate: 24 },
-  low: { width: 320, height: 240, frameRate: 15 }
+  high: { 
+    width: { ideal: 1280, max: 1920 }, 
+    height: { ideal: 720, max: 1080 }, 
+    frameRate: { ideal: 30, max: 30 },
+    aspectRatio: 16/9
+  },
+  medium: { 
+    width: { ideal: 640, max: 1280 }, 
+    height: { ideal: 480, max: 720 }, 
+    frameRate: { ideal: 24, max: 30 } 
+  },
+  low: { 
+    width: { ideal: 320, max: 640 }, 
+    height: { ideal: 240, max: 480 }, 
+    frameRate: { ideal: 15, max: 24 } 
+  }
+};
+
+// SDP modification to set max bitrate for high quality video
+const setMaxBitrate = (sdp, maxBitrate = 8000) => {
+  // Add bandwidth restriction to video
+  const lines = sdp.split('\r\n');
+  const newLines = [];
+  
+  for (let i = 0; i < lines.length; i++) {
+    newLines.push(lines[i]);
+    // After m=video line, add bandwidth
+    if (lines[i].startsWith('m=video')) {
+      newLines.push(`b=AS:${maxBitrate}`);
+    }
+  }
+  
+  return newLines.join('\r\n');
 };
 
 export default function useWebRTC(socket, partnerId, isInitiator) {
@@ -300,7 +369,29 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
       console.log('📹 Adding local tracks to peer connection');
       localMediaStream.getTracks().forEach(track => {
         console.log('📹 Adding track:', track.kind);
-        pc.addTrack(track, localMediaStream);
+        const sender = pc.addTrack(track, localMediaStream);
+        
+        // Set high quality encoding parameters for video (stable bitrate)
+        if (track.kind === 'video' && sender) {
+          const params = sender.getParameters();
+          if (!params.encodings) {
+            params.encodings = [{}];
+          }
+          // Set max bitrate to 2.5 Mbps for stable high quality video
+          params.encodings[0].maxBitrate = 2500000; // 2.5 Mbps - stable for most connections
+          params.encodings[0].maxFramerate = 30;
+          sender.setParameters(params).catch(e => console.log('Could not set video params:', e));
+        }
+        
+        // Set high quality for audio
+        if (track.kind === 'audio' && sender) {
+          const params = sender.getParameters();
+          if (!params.encodings) {
+            params.encodings = [{}];
+          }
+          params.encodings[0].maxBitrate = 128000; // 128 kbps audio
+          sender.setParameters(params).catch(e => console.log('Could not set audio params:', e));
+        }
       });
     } else {
       console.warn('⚠️ No local stream available when creating peer connection');
