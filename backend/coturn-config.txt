@@ -1,0 +1,7 @@
+﻿// .env values for frontend (Vite)
+VITE_TURN_URL=turn:98.91.211.251:3478
+VITE_TURN_USER=omegleuser
+VITE_TURN_PASS=OmegleSecure1456
+
+// Optional: add TCP on 443 if you front the instance with an A record
+// VITE_TURN_URL=turn:98.91.211.251:443

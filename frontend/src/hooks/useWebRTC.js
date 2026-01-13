@@ -6,14 +6,63 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 // ICE servers configuration with STUN + TURN for NAT traversal
-const ICE_SERVERS = {
-  iceServers: [
+const TURN_URL = import.meta.env.VITE_TURN_URL; // e.g. turn:YOUR_IP:3478
+const TURN_USER = import.meta.env.VITE_TURN_USER;
+const TURN_PASS = import.meta.env.VITE_TURN_PASS;
+const METERED_API_KEY = import.meta.env.VITE_METERED_API_KEY;
+
+// Cache for Metered TURN credentials
+let meteredCredentialsCache = null;
+let meteredCredentialsExpiry = 0;
+
+/**
+ * Fetch TURN credentials from Metered.ca API (if API key is set)
+ * Returns fresh credentials valid for 24 hours
+ */
+async function getMeteredTurnServers() {
+  if (!METERED_API_KEY) return [];
+  
+  // Return cached if still valid (refresh 1 hour before expiry)
+  if (meteredCredentialsCache && Date.now() < meteredCredentialsExpiry - 3600000) {
+    return meteredCredentialsCache;
+  }
+  
+  try {
+    const response = await fetch(
+      `https://omegle.metered.live/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`
+    );
+    if (!response.ok) throw new Error('Failed to fetch TURN credentials');
+    
+    const servers = await response.json();
+    meteredCredentialsCache = servers;
+    meteredCredentialsExpiry = Date.now() + 24 * 3600000; // 24 hours
+    console.log('✅ Fetched Metered TURN credentials:', servers.length, 'servers');
+    return servers;
+  } catch (error) {
+    console.warn('⚠️ Could not fetch Metered TURN credentials:', error.message);
+    return [];
+  }
+}
+
+// Build static ICE servers (self-hosted + free fallback)
+function buildStaticIceServers() {
+  const servers = [
     // Google STUN servers
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    
-    // Free TURN servers from OpenRelay (metered.ca)
+  ];
+
+  // Add self-hosted TURN if configured
+  if (TURN_URL && TURN_USER && TURN_PASS) {
+    servers.push(
+      { urls: TURN_URL, username: TURN_USER, credential: TURN_PASS },
+      { urls: `${TURN_URL}?transport=tcp`, username: TURN_USER, credential: TURN_PASS }
+    );
+  }
+
+  // Fallback free TURN (unreliable, rate-limited)
+  servers.push(
     {
       urls: 'turn:a.relay.metered.ca:80',
       username: 'e8dd65b92c62d5e5e3c02c65',
@@ -34,8 +83,6 @@ const ICE_SERVERS = {
       username: 'e8dd65b92c62d5e5e3c02c65',
       credential: 'uWdWNmkhvyqTEuTB'
     },
-    
-    // Backup free TURN servers
     {
       urls: 'turn:openrelay.metered.ca:80',
       username: 'openrelayproject',
@@ -51,7 +98,28 @@ const ICE_SERVERS = {
       username: 'openrelayproject',
       credential: 'openrelayproject'
     }
-  ],
+  );
+
+  return servers;
+}
+
+/**
+ * Get full ICE configuration with Metered (if configured) + static servers
+ */
+async function getIceServers() {
+  const staticServers = buildStaticIceServers();
+  const meteredServers = await getMeteredTurnServers();
+  
+  // Metered servers first (most reliable), then static
+  return {
+    iceServers: [...meteredServers, ...staticServers],
+    iceCandidatePoolSize: 10
+  };
+}
+
+// Synchronous fallback for initial render
+const ICE_SERVERS = {
+  iceServers: buildStaticIceServers(),
   iceCandidatePoolSize: 10
 };
 
@@ -354,14 +422,19 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
 
   /**
    * Create WebRTC peer connection
+   * Uses async ICE servers if Metered API key is configured
    */
-  const createPeerConnection = useCallback((stream) => {
+  const createPeerConnection = useCallback(async (stream) => {
     // Close existing connection if any
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
     }
     
-    const pc = new RTCPeerConnection(ICE_SERVERS);
+    // Get ICE servers (async to support Metered API)
+    const iceConfig = METERED_API_KEY ? await getIceServers() : ICE_SERVERS;
+    console.log('🌐 Using', iceConfig.iceServers.length, 'ICE servers');
+    
+    const pc = new RTCPeerConnection(iceConfig);
     
     // Add local tracks - use passed stream or ref
     const localMediaStream = stream || localStreamRef.current;
