@@ -64,7 +64,7 @@ export default function UserMenu({
     return (
       <button
         onClick={onOpenAuth}
-        className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-sky-500 via-cyan-500 to-teal-400 
+        className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 
                  text-white rounded-2xl font-semibold hover:shadow-lg hover:shadow-indigo-500/25
                  transition-all duration-300 hover:scale-105"
       >
@@ -89,9 +89,9 @@ export default function UserMenu({
       }}
     >
       {/* User Info */}
-      <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 bg-gradient-to-r from-sky-500/10 to-cyan-500/10">
+      <div className="px-4 py-3 border-b border-zinc-200 dark:border-zinc-700 bg-gradient-to-r from-indigo-500/10 to-purple-500/10">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-sky-500 to-cyan-500 
+          <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 
                         flex items-center justify-center text-2xl shadow-md">
             {user.avatar}
           </div>
@@ -161,7 +161,7 @@ export default function UserMenu({
         className="relative flex items-center gap-2 px-3 py-2 rounded-2xl glass-card
                  hover:scale-105 transition-all duration-300"
       >
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-sky-500 to-cyan-500 
+        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 
                       flex items-center justify-center text-lg shadow-md">
           {user.avatar}
         </div>

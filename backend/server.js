@@ -32,13 +32,11 @@ const corsOptions = {
   credentials: true
 };
 
-// Socket.IO with CORS configuration  
+// Socket.IO with CORS configuration
 const io = new Server(httpServer, {
   cors: corsOptions,
-  pingTimeout: 300000, // 5 minutes for large uploads
+  pingTimeout: 60000,
   pingInterval: 25000,
-  maxHttpBufferSize: 5e8, // 500MB to allow large video files
-  allowUpgrades: true,
   transports: ['websocket', 'polling']
 });
 
@@ -190,9 +188,6 @@ app.get('/api/users/search', (req, res) => {
 
 // Store user sessions for reconnection
 const userSessions = new Map(); // sessionId -> { socketId, partnerId, messages }
-
-// Store media chunks during transfer
-const mediaTransfers = new Map(); // transferId -> { chunks: [], type, name, socketId }
 
 // Broadcast stats every 5 seconds
 setInterval(() => {
@@ -524,6 +519,12 @@ io.on('connection', (socket) => {
       sanitizedMessage = validation.sanitized;
     }
     
+    // Validate media size (max 5MB base64)
+    if (media && media.data && media.data.length > 7 * 1024 * 1024) {
+      socket.emit('error', { message: 'Media file too large', type: 'validation' });
+      return;
+    }
+    
     // Get partner and send message
     const partnerId = matchmaking.getPartner(socket.id);
     if (partnerId) {
@@ -538,82 +539,6 @@ io.on('connection', (socket) => {
       
       // Confirm to sender
       socket.emit('message-sent', { id: messageData.id });
-    } else {
-      socket.emit('error', { message: 'Not connected to anyone', type: 'no-partner' });
-    }
-  });
-
-  /**
-   * Receive media chunk (for large file transfers)
-   */
-  socket.on('media-chunk', (data) => {
-    const { transferId, chunkIndex, totalChunks, data: chunkData, type, name } = data;
-    
-    // Initialize transfer if first chunk
-    if (!mediaTransfers.has(transferId)) {
-      mediaTransfers.set(transferId, {
-        chunks: new Array(totalChunks),
-        type,
-        name,
-        socketId: socket.id,
-        receivedCount: 0
-      });
-    }
-    
-    const transfer = mediaTransfers.get(transferId);
-    transfer.chunks[chunkIndex] = chunkData;
-    transfer.receivedCount++;
-    
-    // Log progress for debugging
-    if (chunkIndex % 10 === 0 || chunkIndex === totalChunks - 1) {
-      console.log(`📦 Chunk ${chunkIndex + 1}/${totalChunks} received for transfer ${transferId}`);
-    }
-  });
-
-  /**
-   * Media transfer complete - assemble and send to partner
-   */
-  socket.on('media-complete', (data) => {
-    const { transferId, message, type, name, totalChunks } = data;
-    
-    const transfer = mediaTransfers.get(transferId);
-    if (!transfer) {
-      socket.emit('error', { message: 'Media transfer not found', type: 'transfer-error' });
-      return;
-    }
-    
-    // Verify all chunks received
-    if (transfer.receivedCount !== totalChunks) {
-      console.log(`⚠️ Missing chunks: received ${transfer.receivedCount}/${totalChunks}`);
-      socket.emit('error', { message: 'Some media chunks were lost. Please try again.', type: 'transfer-error' });
-      mediaTransfers.delete(transferId);
-      return;
-    }
-    
-    // Assemble the complete media data
-    const completeData = transfer.chunks.join('');
-    console.log(`✅ Media assembled: ${(completeData.length / 1024 / 1024).toFixed(2)}MB`);
-    
-    // Clean up transfer
-    mediaTransfers.delete(transferId);
-    
-    // Get partner and send complete message
-    const partnerId = matchmaking.getPartner(socket.id);
-    if (partnerId) {
-      const messageData = {
-        message: message || '',
-        media: {
-          type: type,
-          data: completeData,
-          name: name
-        },
-        timestamp: Date.now(),
-        id: `${socket.id}-${Date.now()}`
-      };
-      
-      io.to(partnerId).emit('chat-message', messageData);
-      socket.emit('message-sent', { id: messageData.id });
-      console.log(`📤 Large media sent to partner ${partnerId}`);
     } else {
       socket.emit('error', { message: 'Not connected to anyone', type: 'no-partner' });
     }
@@ -705,16 +630,6 @@ io.on('connection', (socket) => {
     }
   });
 
-  /**
-   * WebRTC keepalive - prevents connection timeout
-   */
-  socket.on('webrtc-keepalive', (data) => {
-    const partnerId = matchmaking.getPartner(socket.id);
-    if (partnerId) {
-      io.to(partnerId).emit('webrtc-keepalive', { from: socket.id });
-    }
-  });
-
   // ------------------
   // MODERATION EVENTS
   // ------------------
@@ -759,14 +674,6 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', (reason) => {
     console.log(`❌ User disconnected: ${socket.id} (${reason})`);
-    
-    // Cleanup any pending media transfers for this user
-    for (const [transferId, transfer] of mediaTransfers.entries()) {
-      if (transfer.socketId === socket.id) {
-        mediaTransfers.delete(transferId);
-        console.log(`🗑️ Cleaned up abandoned transfer: ${transferId}`);
-      }
-    }
     
     // Notify partner
     const partnerId = matchmaking.removeUser(socket.id);

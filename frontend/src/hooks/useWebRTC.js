@@ -5,159 +5,22 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 
-// ICE servers configuration with STUN + TURN for NAT traversal
-const TURN_URL = import.meta.env.VITE_TURN_URL; // e.g. turn:YOUR_IP:3478
-const TURN_USER = import.meta.env.VITE_TURN_USER;
-const TURN_PASS = import.meta.env.VITE_TURN_PASS;
-const METERED_API_KEY = import.meta.env.VITE_METERED_API_KEY;
-
-// Cache for Metered TURN credentials
-let meteredCredentialsCache = null;
-let meteredCredentialsExpiry = 0;
-
-/**
- * Fetch TURN credentials from Metered.ca API (if API key is set)
- * Returns fresh credentials valid for 24 hours
- */
-async function getMeteredTurnServers() {
-  if (!METERED_API_KEY) return [];
-  
-  // Return cached if still valid (refresh 1 hour before expiry)
-  if (meteredCredentialsCache && Date.now() < meteredCredentialsExpiry - 3600000) {
-    return meteredCredentialsCache;
-  }
-  
-  try {
-    const response = await fetch(
-      `https://omegle.metered.live/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`
-    );
-    if (!response.ok) throw new Error('Failed to fetch TURN credentials');
-    
-    const servers = await response.json();
-    meteredCredentialsCache = servers;
-    meteredCredentialsExpiry = Date.now() + 24 * 3600000; // 24 hours
-    console.log('✅ Fetched Metered TURN credentials:', servers.length, 'servers');
-    return servers;
-  } catch (error) {
-    console.warn('⚠️ Could not fetch Metered TURN credentials:', error.message);
-    return [];
-  }
-}
-
-// Build static ICE servers (self-hosted + free fallback)
-function buildStaticIceServers() {
-  const servers = [
-    // Google STUN servers
+// ICE servers configuration
+const ICE_SERVERS = {
+  iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-  ];
-
-  // Add self-hosted TURN if configured
-  if (TURN_URL && TURN_USER && TURN_PASS) {
-    servers.push(
-      { urls: TURN_URL, username: TURN_USER, credential: TURN_PASS },
-      { urls: `${TURN_URL}?transport=tcp`, username: TURN_USER, credential: TURN_PASS }
-    );
-  }
-
-  // Fallback free TURN (unreliable, rate-limited)
-  servers.push(
-    {
-      urls: 'turn:a.relay.metered.ca:80',
-      username: 'e8dd65b92c62d5e5e3c02c65',
-      credential: 'uWdWNmkhvyqTEuTB'
-    },
-    {
-      urls: 'turn:a.relay.metered.ca:80?transport=tcp',
-      username: 'e8dd65b92c62d5e5e3c02c65',
-      credential: 'uWdWNmkhvyqTEuTB'
-    },
-    {
-      urls: 'turn:a.relay.metered.ca:443',
-      username: 'e8dd65b92c62d5e5e3c02c65',
-      credential: 'uWdWNmkhvyqTEuTB'
-    },
-    {
-      urls: 'turn:a.relay.metered.ca:443?transport=tcp',
-      username: 'e8dd65b92c62d5e5e3c02c65',
-      credential: 'uWdWNmkhvyqTEuTB'
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:80',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    },
-    {
-      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    }
-  );
-
-  return servers;
-}
-
-/**
- * Get full ICE configuration with Metered (if configured) + static servers
- */
-async function getIceServers() {
-  const staticServers = buildStaticIceServers();
-  const meteredServers = await getMeteredTurnServers();
-  
-  // Metered servers first (most reliable), then static
-  return {
-    iceServers: [...meteredServers, ...staticServers],
-    iceCandidatePoolSize: 10
-  };
-}
-
-// Synchronous fallback for initial render
-const ICE_SERVERS = {
-  iceServers: buildStaticIceServers(),
-  iceCandidatePoolSize: 10
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+  ]
 };
 
-// Video constraints for different quality levels - HIGH QUALITY BUT STABLE
+// Video constraints for different quality levels
 const QUALITY_PRESETS = {
-  high: { 
-    width: { ideal: 1280, max: 1920 }, 
-    height: { ideal: 720, max: 1080 }, 
-    frameRate: { ideal: 30, max: 30 },
-    aspectRatio: 16/9
-  },
-  medium: { 
-    width: { ideal: 640, max: 1280 }, 
-    height: { ideal: 480, max: 720 }, 
-    frameRate: { ideal: 24, max: 30 } 
-  },
-  low: { 
-    width: { ideal: 320, max: 640 }, 
-    height: { ideal: 240, max: 480 }, 
-    frameRate: { ideal: 15, max: 24 } 
-  }
-};
-
-// SDP modification to set max bitrate for high quality video
-const setMaxBitrate = (sdp, maxBitrate = 8000) => {
-  // Add bandwidth restriction to video
-  const lines = sdp.split('\r\n');
-  const newLines = [];
-  
-  for (let i = 0; i < lines.length; i++) {
-    newLines.push(lines[i]);
-    // After m=video line, add bandwidth
-    if (lines[i].startsWith('m=video')) {
-      newLines.push(`b=AS:${maxBitrate}`);
-    }
-  }
-  
-  return newLines.join('\r\n');
+  high: { width: 1280, height: 720, frameRate: 30 },
+  medium: { width: 640, height: 480, frameRate: 24 },
+  low: { width: 320, height: 240, frameRate: 15 }
 };
 
 export default function useWebRTC(socket, partnerId, isInitiator) {
@@ -165,9 +28,6 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
   const localStreamRef = useRef(null);
   const screenStreamRef = useRef(null);
   const statsIntervalRef = useRef(null);
-  const keepaliveIntervalRef = useRef(null);
-  const reconnectAttempts = useRef(0);
-  const lastIceRestartRef = useRef(0);
   
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
@@ -178,7 +38,6 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
   const [connectionState, setConnectionState] = useState('new');
   const [connectionQuality, setConnectionQuality] = useState('good'); // good, fair, poor
   const [currentQuality, setCurrentQuality] = useState('high');
-  const [currentCameraFacing, setCurrentCameraFacing] = useState('user');
   const [partnerScreenSharing, setPartnerScreenSharing] = useState(false);
 
   /**
@@ -202,14 +61,6 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
       localStreamRef.current = stream;
       setLocalStream(stream);
       setCurrentQuality(quality);
-      setCurrentCameraFacing(constraints.video?.facingMode === 'environment' ? 'environment' : 'user');
-      
-      // Sync state with actual track enabled status
-      const hasVideo = stream.getVideoTracks().length > 0;
-      const hasAudio = stream.getAudioTracks().length > 0;
-      setIsVideoEnabled(hasVideo && stream.getVideoTracks()[0]?.enabled);
-      setIsAudioEnabled(hasAudio && stream.getAudioTracks()[0]?.enabled);
-      
       return stream;
     } catch (error) {
       console.error('Error accessing media devices:', error);
@@ -220,7 +71,6 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
         localStreamRef.current = audioStream;
         setLocalStream(audioStream);
         setIsVideoEnabled(false);
-        setIsAudioEnabled(audioStream.getAudioTracks()[0]?.enabled ?? true);
         return audioStream;
       } catch (audioError) {
         console.error('Error accessing audio:', audioError);
@@ -245,35 +95,6 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
       }
     }
   }, []);
-
-  /**
-   * Stop screen sharing
-   */
-  const stopScreenShare = useCallback(async () => {
-    if (screenStreamRef.current) {
-      screenStreamRef.current.getTracks().forEach(track => track.stop());
-      screenStreamRef.current = null;
-      setScreenStream(null);
-      setIsScreenSharing(false);
-
-      // Restore camera video
-      const pc = peerConnectionRef.current;
-      if (pc && localStreamRef.current) {
-        const videoTrack = localStreamRef.current.getVideoTracks()[0];
-        if (videoTrack) {
-          const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-          if (sender) {
-            await sender.replaceTrack(videoTrack);
-          }
-        }
-      }
-
-      // Notify partner
-      if (socket) {
-        socket.emit('screen-share-stopped');
-      }
-    }
-  }, [socket]);
 
   /**
    * Start screen sharing
@@ -316,125 +137,47 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
       console.error('Error starting screen share:', error);
       return null;
     }
-  }, [socket, stopScreenShare]);
+  }, [socket]);
 
   /**
-   * Switch between front/rear cameras (where available)
+   * Stop screen sharing
    */
-  const switchCamera = useCallback(async () => {
-    try {
-      // If screen sharing is on, stop it before switching cameras
-      if (isScreenSharing) {
-        await stopScreenShare();
-      }
+  const stopScreenShare = useCallback(async () => {
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach(track => track.stop());
+      screenStreamRef.current = null;
+      setScreenStream(null);
+      setIsScreenSharing(false);
 
-      const nextFacing = currentCameraFacing === 'user' ? 'environment' : 'user';
-
-      // Only request video; reuse existing audio tracks
-      const newVideoStream = await navigator.mediaDevices.getUserMedia({
-        video: { ...QUALITY_PRESETS[currentQuality], facingMode: { ideal: nextFacing } },
-        audio: false
-      });
-
-      const newVideoTrack = newVideoStream.getVideoTracks()[0];
-      if (!newVideoTrack) return false;
-
-      const existingAudioTracks = localStreamRef.current?.getAudioTracks() || [];
-      const newCombinedStream = new MediaStream([...existingAudioTracks, newVideoTrack]);
-
-      // Replace video track in peer connection
+      // Restore camera video
       const pc = peerConnectionRef.current;
-      if (pc) {
-        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
-        if (sender) {
-          await sender.replaceTrack(newVideoTrack);
+      if (pc && localStreamRef.current) {
+        const videoTrack = localStreamRef.current.getVideoTracks()[0];
+        if (videoTrack) {
+          const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+          if (sender) {
+            await sender.replaceTrack(videoTrack);
+          }
         }
       }
 
-      // Stop old video tracks
-      if (localStreamRef.current) {
-        localStreamRef.current.getVideoTracks().forEach(track => track.stop());
+      // Notify partner
+      if (socket) {
+        socket.emit('screen-share-stopped');
       }
-
-      localStreamRef.current = newCombinedStream;
-      setLocalStream(newCombinedStream);
-      setIsVideoEnabled(true);
-      setCurrentCameraFacing(nextFacing);
-      return true;
-    } catch (error) {
-      console.error('Error switching camera:', error);
-      return false;
     }
-  }, [currentCameraFacing, currentQuality, isScreenSharing, stopScreenShare]);
-
-  /**
-   * Start keepalive mechanism
-   */
-  const startKeepalive = () => {
-    stopKeepalive();
-    keepaliveIntervalRef.current = setInterval(() => {
-      if (socket && partnerId) {
-        socket.emit('webrtc-keepalive', { to: partnerId });
-      }
-    }, 15000); // Send keepalive every 15 seconds
-  };
-
-  /**
-   * Stop keepalive
-   */
-  const stopKeepalive = () => {
-    if (keepaliveIntervalRef.current) {
-      clearInterval(keepaliveIntervalRef.current);
-      keepaliveIntervalRef.current = null;
-    }
-  };
-
-  /**
-   * Attempt ICE restart to recover connection
-   */
-  const attemptIceRestart = async (pc) => {
-    // Prevent too frequent restarts
-    const now = Date.now();
-    if (now - lastIceRestartRef.current < 10000) {
-      console.log('⏳ ICE restart too soon, skipping...');
-      return;
-    }
-    
-    if (reconnectAttempts.current >= 3) {
-      console.log('❌ Max reconnect attempts reached');
-      return;
-    }
-    
-    lastIceRestartRef.current = now;
-    reconnectAttempts.current++;
-    
-    try {
-      if (isInitiator) {
-        console.log('🔄 Creating new offer with ICE restart...');
-        const offer = await pc.createOffer({ iceRestart: true });
-        await pc.setLocalDescription(offer);
-        socket.emit('webrtc-offer', { offer, iceRestart: true });
-      }
-    } catch (error) {
-      console.error('Error during ICE restart:', error);
-    }
-  };
+  }, [socket]);
 
   /**
    * Create WebRTC peer connection
-   * Uses async ICE servers if Metered API key is configured
    */
-  const createPeerConnection = useCallback(async (stream) => {
+  const createPeerConnection = useCallback((stream) => {
     // Close existing connection if any
     if (peerConnectionRef.current) {
       peerConnectionRef.current.close();
     }
     
-    // Get ICE servers (async to support Metered API)
-    const iceConfig = METERED_API_KEY ? await getIceServers() : ICE_SERVERS;
-    console.log('🌐 Using', iceConfig.iceServers.length, 'ICE servers');
-    
-    const pc = new RTCPeerConnection(iceConfig);
+    const pc = new RTCPeerConnection(ICE_SERVERS);
     
     // Add local tracks - use passed stream or ref
     const localMediaStream = stream || localStreamRef.current;
@@ -442,29 +185,7 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
       console.log('📹 Adding local tracks to peer connection');
       localMediaStream.getTracks().forEach(track => {
         console.log('📹 Adding track:', track.kind);
-        const sender = pc.addTrack(track, localMediaStream);
-        
-        // Set high quality encoding parameters for video (stable bitrate)
-        if (track.kind === 'video' && sender) {
-          const params = sender.getParameters();
-          if (!params.encodings) {
-            params.encodings = [{}];
-          }
-          // Set max bitrate to 2.5 Mbps for stable high quality video
-          params.encodings[0].maxBitrate = 2500000; // 2.5 Mbps - stable for most connections
-          params.encodings[0].maxFramerate = 30;
-          sender.setParameters(params).catch(e => console.log('Could not set video params:', e));
-        }
-        
-        // Set high quality for audio
-        if (track.kind === 'audio' && sender) {
-          const params = sender.getParameters();
-          if (!params.encodings) {
-            params.encodings = [{}];
-          }
-          params.encodings[0].maxBitrate = 128000; // 128 kbps audio
-          sender.setParameters(params).catch(e => console.log('Could not set audio params:', e));
-        }
+        pc.addTrack(track, localMediaStream);
       });
     } else {
       console.warn('⚠️ No local stream available when creating peer connection');
@@ -493,35 +214,13 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
       
       if (pc.connectionState === 'connected') {
         startStatsMonitoring(pc);
-        startKeepalive();
-        reconnectAttempts.current = 0;
       } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
         stopStatsMonitoring();
-        stopKeepalive();
       }
     };
     
-    pc.oniceconnectionstatechange = async () => {
+    pc.oniceconnectionstatechange = () => {
       console.log('ICE connection state:', pc.iceConnectionState);
-      
-      // Handle disconnected/failed states with ICE restart
-      if (pc.iceConnectionState === 'disconnected') {
-        console.log('⚠️ ICE disconnected, will attempt restart if fails...');
-        // Wait a bit to see if it recovers
-        setTimeout(async () => {
-          if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
-            console.log('🔄 Attempting ICE restart...');
-            await attemptIceRestart(pc);
-          }
-        }, 3000);
-      } else if (pc.iceConnectionState === 'failed') {
-        console.log('❌ ICE failed, restarting...');
-        await attemptIceRestart(pc);
-      } else if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
-        console.log('✅ ICE connection restored');
-        reconnectAttempts.current = 0;
-        startKeepalive();
-      }
     };
     
     peerConnectionRef.current = pc;
@@ -614,9 +313,8 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
     
     console.log('✅ Got local stream with tracks:', stream.getTracks().map(t => t.kind));
     
-    // Create peer connection with the stream and AWAIT it
-    const pc = await createPeerConnection(stream);
-    peerConnectionRef.current = pc;
+    // Create peer connection with the stream
+    const pc = createPeerConnection(stream);
     
     if (isInitiator) {
       try {
@@ -650,10 +348,9 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
       stream = await getLocalStream();
     }
     
-    // Create peer connection if needed and AWAIT it
+    // Create peer connection if needed
     if (!peerConnectionRef.current) {
-      const pc = await createPeerConnection(stream);
-      peerConnectionRef.current = pc;
+      createPeerConnection(stream);
     }
     
     const pc = peerConnectionRef.current;
@@ -707,54 +404,43 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
    * Toggle video
    */
   const toggleVideo = useCallback(() => {
+    console.log('📹 Toggling video, current state:', isVideoEnabled);
     if (localStreamRef.current) {
       const videoTracks = localStreamRef.current.getVideoTracks();
-      if (videoTracks.length > 0) {
-        // Get current state from the actual track, not from React state
-        const currentEnabled = videoTracks[0].enabled;
-        const newEnabled = !currentEnabled;
-        
-        videoTracks.forEach(track => {
-          track.enabled = newEnabled;
-        });
-        
-        console.log('📹 Video toggled:', currentEnabled, '->', newEnabled);
-        setIsVideoEnabled(newEnabled);
-      }
+      console.log('📹 Video tracks found:', videoTracks.length);
+      videoTracks.forEach(track => {
+        track.enabled = !track.enabled;
+        console.log('📹 Video track enabled:', track.enabled);
+      });
+      setIsVideoEnabled(prev => !prev);
     } else {
       console.warn('📹 No local stream available for video toggle');
     }
-  }, []);
+  }, [isVideoEnabled]);
 
   /**
    * Toggle audio
    */
   const toggleAudio = useCallback(() => {
+    console.log('🎤 Toggling audio, current state:', isAudioEnabled);
     if (localStreamRef.current) {
       const audioTracks = localStreamRef.current.getAudioTracks();
-      if (audioTracks.length > 0) {
-        // Get current state from the actual track, not from React state
-        const currentEnabled = audioTracks[0].enabled;
-        const newEnabled = !currentEnabled;
-        
-        audioTracks.forEach(track => {
-          track.enabled = newEnabled;
-        });
-        
-        console.log('🎤 Audio toggled:', currentEnabled, '->', newEnabled);
-        setIsAudioEnabled(newEnabled);
-      }
+      console.log('🎤 Audio tracks found:', audioTracks.length);
+      audioTracks.forEach(track => {
+        track.enabled = !track.enabled;
+        console.log('🎤 Audio track enabled:', track.enabled);
+      });
+      setIsAudioEnabled(prev => !prev);
     } else {
       console.warn('🎤 No local stream available for audio toggle');
     }
-  }, []);
+  }, [isAudioEnabled]);
 
   /**
    * Close connection and cleanup
    */
   const closeConnection = useCallback(() => {
     stopStatsMonitoring();
-    stopKeepalive();
     stopScreenShare();
     
     if (peerConnectionRef.current) {
@@ -783,17 +469,12 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
     socket.on('partner-screen-share', (data) => {
       setPartnerScreenSharing(data.active);
     });
-    socket.on('webrtc-keepalive', () => {
-      // Keepalive received from partner - connection is alive
-      console.log('💓 Keepalive received from partner');
-    });
     
     return () => {
       socket.off('webrtc-offer', handleOffer);
       socket.off('webrtc-answer', handleAnswer);
       socket.off('ice-candidate', handleIceCandidate);
       socket.off('partner-screen-share');
-      socket.off('webrtc-keepalive');
     };
   }, [socket, handleOffer, handleAnswer, handleIceCandidate]);
 
@@ -829,11 +510,9 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
     connectionState,
     connectionQuality,
     currentQuality,
-    currentCameraFacing,
     partnerScreenSharing,
     toggleVideo,
     toggleAudio,
-    switchCamera,
     startScreenShare,
     stopScreenShare,
     switchQuality,
