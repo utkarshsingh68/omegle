@@ -614,8 +614,9 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
     
     console.log('✅ Got local stream with tracks:', stream.getTracks().map(t => t.kind));
     
-    // Create peer connection with the stream
-    const pc = createPeerConnection(stream);
+    // Create peer connection with the stream and AWAIT it
+    const pc = await createPeerConnection(stream);
+    peerConnectionRef.current = pc;
     
     if (isInitiator) {
       try {
@@ -649,9 +650,10 @@ export default function useWebRTC(socket, partnerId, isInitiator) {
       stream = await getLocalStream();
     }
     
-    // Create peer connection if needed
+    // Create peer connection if needed and AWAIT it
     if (!peerConnectionRef.current) {
-      createPeerConnection(stream);
+      const pc = await createPeerConnection(stream);
+      peerConnectionRef.current = pc;
     }
     
     const pc = peerConnectionRef.current;
